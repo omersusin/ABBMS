@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/system/bin/sh
 # Android Battery Monitoring System
 # Version: 1.0.0
 # License: MIT
