@@ -23,6 +23,30 @@ TERMINAL_WIDTH=80
 TERMINAL_HEIGHT=24
 START_LIVE=0  # Initialize START_LIVE variable
 
+# Check if tput is installed
+if ! command -v tput >/dev/null 2>&1; then
+  echo "tput not found. Attempting to install..."
+
+  # Try installing via Termux's package manager
+  if command -v pkg >/dev/null 2>&1; then
+    pkg update -y && pkg install ncurses -y
+  elif command -v apt >/dev/null 2>&1; then
+    apt update && apt install ncurses-bin -y
+  else
+    echo "Could not find a supported package manager to install 'tput'." >&2
+    exit 1
+  fi
+
+  # Recheck after install
+  if ! command -v tput >/dev/null 2>&1; then
+    echo "Installation failed or 'tput' still not available." >&2
+    exit 1
+  fi
+
+  echo "tput successfully installed."
+fi
+
+
 # Battery data storage
 declare -A BATTERY_INFO=(
   [capacity]=0
