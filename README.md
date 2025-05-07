@@ -4,12 +4,12 @@ Terminal-based tool monitoring Android battery status, health, and temperature.
 Android Battery Monitoring System/Script is a terminal-based tool designed for real-time monitoring of battery status, health, and temperature on Android devices. It tracks charging patterns, diagnoses battery issues, and provides detailed analyses to help optimize performance. With its intuitive interface and extensive language support, it offers a comprehensive solution for all your battery-monitoring needs.
 
 ## 📊 Main Features
-🔋 Instant battery status monitoring
-📈 Live battery tracking with graph display
-🌡 Thermal status and temperature monitoring
-🔄 Automatic data refresh (configurable interval)
-📝 Battery performance logging
-📋 Detailed technical information
+-🔋 Instant battery status monitoring
+- 📈 Live battery tracking with graph display
+- 🌡 Thermal status and temperature monitoring
+- 🔄 Automatic data refresh (configurable interval)
+- 📝 Battery performance logging
+- 📋 Detailed technical information
 
 ## 🌐 Language Support
 🇺🇸 English
@@ -37,7 +37,7 @@ Android Battery Monitoring System/Script is a terminal-based tool designed for r
 📉 Battery health status analysis
 🔥 Thermal stress detection
 🔄 Charge cycle counter
-
+ 
 ## 💾 Logging & Data
 📂 Log records in CSV, JSON, and TXT formats
 📁 Customizable log directory
