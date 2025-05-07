@@ -24,6 +24,7 @@ TERMINAL_HEIGHT=24
 START_LIVE=0  # Initialize START_LIVE variable
 
 # Battery data storage
+declare -A BATTERY_INFO=(
   [capacity]=0
   [temp]=0
   [voltage_now]=0
@@ -42,11 +43,19 @@ START_LIVE=0  # Initialize START_LIVE variable
 )
 
 # Thermal data
+declare -A THERMAL_ZONES=()
+declare -a THERMAL_ZONE_NAMES=()
+declare -a THERMAL_ZONE_TEMPS=()
+declare -a THERMAL_ZONE_PATHS=()
+declare -a THERMAL_ZONE_TRENDS=()
+declare -a PREVIOUS_TEMPS=()
 
 # Initialize the active color scheme
 # Aktif renk şeması
+declare -gA COLORS=()
 
 # Color definitions
+declare -A COLORS_DARK=(
   [RESET]="\033[0m"
   [BOLD]="\033[1m"
   [DIM]="\033[2m"
@@ -72,8 +81,10 @@ START_LIVE=0  # Initialize START_LIVE variable
 
 # First copy the dark theme as default
 for key in "${!COLORS_DARK[@]}"; do
-  COLORS_"$key"="${COLORS_DARK_$key}"
+  COLORS["$key"]="${COLORS_DARK[$key]}"
 done
+
+declare -A COLORS_LIGHT=(
   [RESET]="\033[0m"
   [BOLD]="\033[1m"
   [DIM]="\033[2m"
@@ -98,6 +109,7 @@ done
 )
 
 # Gruvbox tema
+declare -A COLORS_GRUVBOX=(
   [RESET]="\033[0m"
   [BOLD]="\033[1m"
   [DIM]="\033[2m"
@@ -122,6 +134,7 @@ done
 )
 
 # Nord tema
+declare -A COLORS_NORD=(
   [RESET]="\033[0m"
   [BOLD]="\033[1m"
   [DIM]="\033[2m"
@@ -146,6 +159,7 @@ done
 )
 
 # Dracula tema
+declare -A COLORS_DRACULA=(
   [RESET]="\033[0m"
   [BOLD]="\033[1m"
   [DIM]="\033[2m"
@@ -173,7 +187,7 @@ done
 # Update terminal dimensions
 update_terminal_size() {
   if command -v stty &>/dev/null; then
-    stty size 2>/dev/null || echo "24 80" | while read -r TERMINAL_HEIGHT TERMINAL_WIDTH; do :; done
+    read -r TERMINAL_HEIGHT TERMINAL_WIDTH < <(stty size 2>/dev/null || echo "24 80")
   else
     TERMINAL_WIDTH=80
     TERMINAL_HEIGHT=24
@@ -196,47 +210,52 @@ cleanup() {
 error_handler() {
   local line="$1"
   local command="$2"
-  echo -e "${COLORS_DANGER}Hata satır $line: $command${COLORS_RESET}" >&2
+  echo -e "${COLORS[DANGER]}Hata satır $line: $command${COLORS[RESET]}" >&2
   cleanup
 }
 
 # Terminalden çıkıldığında çalışacak
 trap cleanup EXIT INT TERM
-trap 'error_handler 0 ""unknown_command""' ERR
+trap 'error_handler $LINENO "$BASH_COMMAND"' ERR
 trap 'update_terminal_size; clear; show_menu' WINCH
 
 # Temayı seç
 set_theme() {
   local theme="$1"
-  if [ "$theme" == "light" ]; then
+  if [[ "$theme" == "light" ]]; then
     THEME="light"
     # Copy all elements from COLORS_LIGHT to COLORS
+    declare -gA COLORS
     for key in "${!COLORS_LIGHT[@]}"; do
-      COLORS_"$key"="${COLORS_LIGHT_$key}"
+      COLORS["$key"]="${COLORS_LIGHT[$key]}"
     done
-  elif [ "$theme" == "gruvbox" ]; then
+  elif [[ "$theme" == "gruvbox" ]]; then
     THEME="gruvbox"
     # Copy all elements from COLORS_GRUVBOX to COLORS
+    declare -gA COLORS
     for key in "${!COLORS_GRUVBOX[@]}"; do
-      COLORS_"$key"="${COLORS_GRUVBOX_$key}"
+      COLORS["$key"]="${COLORS_GRUVBOX[$key]}"
     done
-  elif [ "$theme" == "nord" ]; then
+  elif [[ "$theme" == "nord" ]]; then
     THEME="nord"
     # Copy all elements from COLORS_NORD to COLORS
+    declare -gA COLORS
     for key in "${!COLORS_NORD[@]}"; do
-      COLORS_"$key"="${COLORS_NORD_$key}"
+      COLORS["$key"]="${COLORS_NORD[$key]}"
     done
-  elif [ "$theme" == "dracula" ]; then
+  elif [[ "$theme" == "dracula" ]]; then
     THEME="dracula"
     # Copy all elements from COLORS_DRACULA to COLORS
+    declare -gA COLORS
     for key in "${!COLORS_DRACULA[@]}"; do
-      COLORS_"$key"="${COLORS_DRACULA_$key}"
+      COLORS["$key"]="${COLORS_DRACULA[$key]}"
     done
   else
     THEME="dark"
     # Copy all elements from COLORS_DARK to COLORS
+    declare -gA COLORS
     for key in "${!COLORS_DARK[@]}"; do
-      COLORS_"$key"="${COLORS_DARK_$key}"
+      COLORS["$key"]="${COLORS_DARK[$key]}"
     done
   fi
 }
@@ -255,13 +274,13 @@ draw_bar() {
   
   # Pil seviyesine göre renk
   # Color based on battery level
-  local color="${COLORS_BAR_FILL}"
+  local color="${COLORS[BAR_FILL]}"
   if (( current < 20 )); then
-    color="${COLORS_BATTERY_LOW}"
+    color="${COLORS[BATTERY_LOW]}"
   elif (( current < 50 )); then
-    color="${COLORS_BATTERY_MID}"
+    color="${COLORS[BATTERY_MID]}"
   else
-    color="${COLORS_BATTERY_HIGH}"
+    color="${COLORS[BATTERY_HIGH]}"
   fi
 
   # Doldurulmuş kısım
@@ -273,12 +292,12 @@ draw_bar() {
   
   # Boş kısım
   # Empty part
-  bar+="${COLORS_BAR_EMPTY}"
+  bar+="${COLORS[BAR_EMPTY]}"
   for (( i=filled; i<width; i++ )); do
     bar+="$char_empty"
   done
   
-  bar+="${COLORS_RESET}"
+  bar+="${COLORS[RESET]}"
   echo -e "$bar"
 }
 
@@ -290,35 +309,35 @@ draw_box() {
   local padding=$(( (width - title_len) / 2 ))
   
   # Üst çizgi
-  echo -ne "${COLORS_BORDER}┌"
+  echo -ne "${COLORS[BORDER]}┌"
   for ((i=0; i<width; i++)); do
     echo -ne "─"
   done
-  echo -e "┐${COLORS_RESET}"
+  echo -e "┐${COLORS[RESET]}"
   
   # Başlık
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]}"
   printf "%${padding}s" ""
-  echo -ne "${COLORS_HEADER}${title}${COLORS_RESET}"
+  echo -ne "${COLORS[HEADER]}${title}${COLORS[RESET]}"
   printf "%$((width - title_len - padding))s" ""
-  echo -e "${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e "${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Başlık altındaki çizgi
-  echo -ne "${COLORS_BORDER}├"
+  echo -ne "${COLORS[BORDER]}├"
   for ((i=0; i<width; i++)); do
     echo -ne "─"
   done
-  echo -e "┤${COLORS_RESET}"
+  echo -e "┤${COLORS[RESET]}"
 }
 
 # Kutu kapanışı
 close_box() {
   local width=$((TERMINAL_WIDTH - 4))
-  echo -ne "${COLORS_BORDER}└"
+  echo -ne "${COLORS[BORDER]}└"
   for ((i=0; i<width; i++)); do
     echo -ne "─"
   done
-  echo -e "┘${COLORS_RESET}"
+  echo -e "┘${COLORS[RESET]}"
 }
 
 # Dosya oku veya varsayılan değer kullan
@@ -326,7 +345,7 @@ read_file_or_default() {
   local file="$1"
   local default="$2"
   
-  if [ -f "$file" ]; then
+  if [[ -f "$file" ]]; then
     cat "$file" 2>/dev/null || echo "$default"
   else
     echo "$default"
@@ -339,15 +358,15 @@ find_battery_path() {
   
   # Standart Android pil dizinlerini kontrol et
   for dir in /sys/class/power_supply/*; do
-    if [ -d "$dir" ]; then
+    if [[ -d "$dir" ]]; then
       # Gerçek bir pil mi kontrol et (present=1 veya type=Battery)
-      if [ -f "$dir/present" && "$(cat "$dir/present" 2>/dev/null)" == "1" ]; then
-        if [ -f "$dir/capacity" || -f "$dir/charge_now" || -f "$dir/energy_now" ]; then
+      if [[ -f "$dir/present" && "$(cat "$dir/present" 2>/dev/null)" == "1" ]]; then
+        if [[ -f "$dir/capacity" || -f "$dir/charge_now" || -f "$dir/energy_now" ]]; then
           battery_path="$dir"
           break
         fi
-      elif [ -f "$dir/type" && "$(cat "$dir/type" 2>/dev/null)" == "Battery" ]; then
-        if [ -f "$dir/capacity" || -f "$dir/charge_now" || -f "$dir/energy_now" ]; then
+      elif [[ -f "$dir/type" && "$(cat "$dir/type" 2>/dev/null)" == "Battery" ]]; then
+        if [[ -f "$dir/capacity" || -f "$dir/charge_now" || -f "$dir/energy_now" ]]; then
           battery_path="$dir"
           break
         fi
@@ -360,89 +379,89 @@ find_battery_path() {
 
 # Pil bilgisini topla
 get_battery_info() {
-  local battery_path="${BATTERY_INFO_path}"
+  local battery_path="${BATTERY_INFO[path]}"
   
   # Pil yolu yoksa bul
-  if [ -z "$battery_path" ]; then
+  if [[ -z "$battery_path" ]]; then
     battery_path=$(find_battery_path)
-    BATTERY_INFO_path="$battery_path"
+    BATTERY_INFO[path]="$battery_path"
   fi
   
   # Pil bulunamadı
-  if [ -z "$battery_path" ]; then
+  if [[ -z "$battery_path" ]]; then
     echo "Pil bulunamadı. Cihaz pil içeriyor mu?" >&2
     return 1
   fi
   
   # Temel pil verilerini oku
-  BATTERY_INFO_capacity=$(read_file_or_default "$battery_path/capacity" "0")
-  BATTERY_INFO_present=$(read_file_or_default "$battery_path/present" "0")
-  BATTERY_INFO_status=$(read_file_or_default "$battery_path/status" "Unknown")
-  BATTERY_INFO_health=$(read_file_or_default "$battery_path/health" "Unknown")
-  BATTERY_INFO_technology=$(read_file_or_default "$battery_path/technology" "Unknown")
+  BATTERY_INFO[capacity]=$(read_file_or_default "$battery_path/capacity" "0")
+  BATTERY_INFO[present]=$(read_file_or_default "$battery_path/present" "0")
+  BATTERY_INFO[status]=$(read_file_or_default "$battery_path/status" "Unknown")
+  BATTERY_INFO[health]=$(read_file_or_default "$battery_path/health" "Unknown")
+  BATTERY_INFO[technology]=$(read_file_or_default "$battery_path/technology" "Unknown")
   
   # Sıcaklık (milli-Celsius'dan Celsius'a dönüştür)
   local temp_raw=$(read_file_or_default "$battery_path/temp" "0")
-  BATTERY_INFO_temp=$(echo "scale=1; $temp_raw / 10" | bc)
+  BATTERY_INFO[temp]=$(echo "scale=1; $temp_raw / 10" | bc)
   
   # Voltaj (micro-volt'dan volt'a dönüştür)
   local voltage_raw=$(read_file_or_default "$battery_path/voltage_now" "0")
-  BATTERY_INFO_voltage_now=$(echo "scale=2; $voltage_raw / 1000000" | bc)
+  BATTERY_INFO[voltage_now]=$(echo "scale=2; $voltage_raw / 1000000" | bc)
   
   # Akım (micro-amper'den amper'e dönüştür)
   local current_raw=$(read_file_or_default "$battery_path/current_now" "0")
   # Bazı cihazlar negative akım için farklı dosya kullanabilir
-  if [ "$current_raw" == "0" ]; then
+  if [[ "$current_raw" == "0" ]]; then
     current_raw=$(read_file_or_default "$battery_path/BatteryAverageCurrent" "0")
   fi
-  BATTERY_INFO_current_now=$(echo "scale=3; $current_raw / 1000000" | bc)
+  BATTERY_INFO[current_now]=$(echo "scale=3; $current_raw / 1000000" | bc)
   
   # Tasarım kapasitesi (micro-amper-saat'ten mili-amper-saat'e dönüştür)
   local design_capacity_raw=$(read_file_or_default "$battery_path/charge_full_design" "0")
-  if [ "$design_capacity_raw" == "0" ]; then
+  if [[ "$design_capacity_raw" == "0" ]]; then
     design_capacity_raw=$(read_file_or_default "$battery_path/energy_full_design" "0")
   fi
-  BATTERY_INFO_charge_full_design=$(echo "scale=0; $design_capacity_raw / 1000" | bc)
+  BATTERY_INFO[charge_full_design]=$(echo "scale=0; $design_capacity_raw / 1000" | bc)
   
   # Tam kapasitesi
   local full_capacity_raw=$(read_file_or_default "$battery_path/charge_full" "0")
-  if [ "$full_capacity_raw" == "0" ]; then
+  if [[ "$full_capacity_raw" == "0" ]]; then
     full_capacity_raw=$(read_file_or_default "$battery_path/energy_full" "0")
   fi
-  BATTERY_INFO_charge_full=$(echo "scale=0; $full_capacity_raw / 1000" | bc)
+  BATTERY_INFO[charge_full]=$(echo "scale=0; $full_capacity_raw / 1000" | bc)
   
   # Şu anki şarj
   local current_charge_raw=$(read_file_or_default "$battery_path/charge_now" "0")
-  if [ "$current_charge_raw" == "0" ]; then
+  if [[ "$current_charge_raw" == "0" ]]; then
     current_charge_raw=$(read_file_or_default "$battery_path/energy_now" "0")
   fi
-  BATTERY_INFO_charge_now=$(echo "scale=0; $current_charge_raw / 1000" | bc)
+  BATTERY_INFO[charge_now]=$(echo "scale=0; $current_charge_raw / 1000" | bc)
   
   # Çevrim sayısı
-  BATTERY_INFO_cycle_count=$(read_file_or_default "$battery_path/cycle_count" "0")
+  BATTERY_INFO[cycle_count]=$(read_file_or_default "$battery_path/cycle_count" "0")
   
   # Güç hesaplama (miliwatt)
-  local voltage=$(echo "${BATTERY_INFO_voltage_now}" | sed 's/,/./g')
-  local current=$(echo "${BATTERY_INFO_current_now}" | sed 's/,/./g')
-  BATTERY_INFO_power_mw=$(echo "scale=1; $voltage * $current * 1000" | bc | awk '{printf "%.1f", $1}')
+  local voltage=$(echo "${BATTERY_INFO[voltage_now]}" | sed 's/,/./g')
+  local current=$(echo "${BATTERY_INFO[current_now]}" | sed 's/,/./g')
+  BATTERY_INFO[power_mw]=$(echo "scale=1; $voltage * $current * 1000" | bc | awk '{printf "%.1f", $1}')
   
   # Sağlık yüzdesi
-  if [ "${BATTERY_INFO_charge_full_design}" != "0" ]; then
-    local health_percent=$(echo "scale=0; 100 * ${BATTERY_INFO_charge_full} / ${BATTERY_INFO_charge_full_design}" | bc)
+  if [[ "${BATTERY_INFO[charge_full_design]}" != "0" ]]; then
+    local health_percent=$(echo "scale=0; 100 * ${BATTERY_INFO[charge_full]} / ${BATTERY_INFO[charge_full_design]}" | bc)
     # 100%'den fazla olmamalı
     if (( health_percent > 100 )); then
       health_percent=100
     fi
-    BATTERY_INFO_health_percent="$health_percent"
+    BATTERY_INFO[health_percent]="$health_percent"
   else
-    BATTERY_INFO_health_percent="0"
+    BATTERY_INFO[health_percent]="0"
   fi
 }
 
 # Termal bilgi topla
 get_thermal_info() {
   # Önceki sıcaklıkları kaydet (trend için)
-  PREVIOUS_TEMPS=("${THERMAL_ZONE_TEMPS_@}")
+  PREVIOUS_TEMPS=("${THERMAL_ZONE_TEMPS[@]}")
   
   # Dizileri temizle
   THERMAL_ZONE_NAMES=()
@@ -454,7 +473,7 @@ get_thermal_info() {
   
   # Tüm termal bölgeleri bul
   for zone_path in /sys/class/thermal/thermal_zone*; do
-    if [ -d "$zone_path" ]; then
+    if [[ -d "$zone_path" ]]; then
       # Bölge tipi ve sıcaklık
       local zone_type=$(read_file_or_default "$zone_path/type" "unknown")
       local temp_raw=$(read_file_or_default "$zone_path/temp" "0")
@@ -473,8 +492,8 @@ get_thermal_info() {
       zone_index=$((zone_index - 1))
       
       # Önceki ölçüm varsa karşılaştır
-      if [ -n "${PREVIOUS_TEMPS[$zone_index]:-}" ]; then
-        local prev_temp="${PREVIOUS_TEMPS_$zone_index}"
+      if [[ -n "${PREVIOUS_TEMPS[$zone_index]:-}" ]]; then
+        local prev_temp="${PREVIOUS_TEMPS[$zone_index]}"
         if (( $(echo "$temp > $prev_temp + 0.5" | bc -l) )); then
           trend="▲"
         elif (( $(echo "$temp < $prev_temp - 0.5" | bc -l) )); then
@@ -493,7 +512,7 @@ get_hottest_zone() {
   local max_index=0
   
   for ((i=0; i<${#THERMAL_ZONE_TEMPS[@]}; i++)); do
-    local temp="${THERMAL_ZONE_TEMPS_$i}"
+    local temp="${THERMAL_ZONE_TEMPS[$i]}"
     if (( $(echo "$temp > $max_temp" | bc -l) )); then
       max_temp="$temp"
       max_index="$i"
@@ -506,14 +525,14 @@ get_hottest_zone() {
 # Sıcaklık değerine göre renk belirle
 get_temp_color() {
   local temp="$1"
-  local color="${COLORS_THERMAL_NORMAL}"
+  local color="${COLORS[THERMAL_NORMAL]}"
   
   if (( $(echo "$temp >= 50" | bc -l) )); then
-    color="${COLORS_THERMAL_CRITICAL}"
+    color="${COLORS[THERMAL_CRITICAL]}"
   elif (( $(echo "$temp >= 45" | bc -l) )); then
-    color="${COLORS_THERMAL_VERY_HIGH}"
+    color="${COLORS[THERMAL_VERY_HIGH]}"
   elif (( $(echo "$temp >= 40" | bc -l) )); then
-    color="${COLORS_THERMAL_HIGH}"
+    color="${COLORS[THERMAL_HIGH]}"
   fi
   
   echo "$color"
@@ -535,175 +554,175 @@ show_battery_status() {
   local bar_width=$((width - 10))
   
   # Pil seviyesi ve çubuk
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   
-  local capacity="${BATTERY_INFO_capacity}"
-  local capacity_color="${COLORS_NORMAL}"
+  local capacity="${BATTERY_INFO[capacity]}"
+  local capacity_color="${COLORS[NORMAL]}"
   if (( capacity < 20 )); then
-    capacity_color="${COLORS_BATTERY_LOW}"
+    capacity_color="${COLORS[BATTERY_LOW]}"
   elif (( capacity < 50 )); then
-    capacity_color="${COLORS_BATTERY_MID}"
+    capacity_color="${COLORS[BATTERY_MID]}"
   else
-    capacity_color="${COLORS_BATTERY_HIGH}"
+    capacity_color="${COLORS[BATTERY_HIGH]}"
   fi
   
-  echo -ne "Battery: ${capacity_color}${capacity}%${COLORS_RESET} "
+  echo -ne "Battery: ${capacity_color}${capacity}%${COLORS[RESET]} "
   echo -ne "$(draw_bar "$capacity" 100 "$bar_width")"
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Durum bilgisi
-  local status="${BATTERY_INFO_status}"
-  local status_color="${COLORS_NORMAL}"
+  local status="${BATTERY_INFO[status]}"
+  local status_color="${COLORS[NORMAL]}"
   case "$status" in
     "Charging") 
       status="Charging"
-      status_color="${COLORS_SUCCESS}"
+      status_color="${COLORS[SUCCESS]}"
       ;;
     "Discharging") 
       status="Discharging"
-      status_color="${COLORS_WARNING}"
+      status_color="${COLORS[WARNING]}"
       ;;
     "Full") 
       status="Full"
-      status_color="${COLORS_SUCCESS}"
+      status_color="${COLORS[SUCCESS]}"
       ;;
     "Not charging") 
       status="Not charging"
-      status_color="${COLORS_WARNING}"
+      status_color="${COLORS[WARNING]}"
       ;;
     *) 
       status="Unknown"
-      status_color="${COLORS_NORMAL}"
+      status_color="${COLORS[NORMAL]}"
       ;;
   esac
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "Status: ${status_color}${status}${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "Status: ${status_color}${status}${COLORS[RESET]}"
   
   # Sağlık bilgisi
-  local health_percent="${BATTERY_INFO_health_percent}"
-  local health_color="${COLORS_SUCCESS}"
+  local health_percent="${BATTERY_INFO[health_percent]}"
+  local health_color="${COLORS[SUCCESS]}"
   if (( health_percent < 60 )); then
-    health_color="${COLORS_DANGER}"
+    health_color="${COLORS[DANGER]}"
   elif (( health_percent < 80 )); then
-    health_color="${COLORS_WARNING}"
+    health_color="${COLORS[WARNING]}"
   fi
   
   printf "%*s" $((width - 18 - ${#status})) ""
-  echo -ne "Health: ${health_color}${health_percent}%${COLORS_RESET} "
-  echo -e "${COLORS_BORDER}│${COLORS_RESET}"
+  echo -ne "Health: ${health_color}${health_percent}%${COLORS[RESET]} "
+  echo -e "${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Şarj hızı ve kalan süre tahmini (yeni eklenen)
-  local current="${BATTERY_INFO_current_now}"
+  local current="${BATTERY_INFO[current_now]}"
   local charging_speed=$(get_charging_speed "$current" "$status")
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "Charging Type: ${charging_speed} | "
   
-  local charge_full="${BATTERY_INFO_charge_full}"
+  local charge_full="${BATTERY_INFO[charge_full]}"
   local est_time=$(estimate_remaining_time "$capacity" "$charge_full" "$current" "$status")
-  if [ -n "$est_time" ]; then
+  if [[ -n "$est_time" ]]; then
     echo -ne "Estimated: ${est_time}"
   else
-    echo -ne "Estimated: ${COLORS_NORMAL}N/A${COLORS_RESET}"
+    echo -ne "Estimated: ${COLORS[NORMAL]}N/A${COLORS[RESET]}"
   fi
   
   printf "%*s" $((width - 60)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Detay modu "minimal" değilse daha fazla bilgi göster
-  if [ "$VIEW_MODE" != "minimal" ]; then
+  if [[ "$VIEW_MODE" != "minimal" ]]; then
     # Sıcaklık, Voltaj, Akım bilgisi
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
     
-    local temp="${BATTERY_INFO_temp}"
+    local temp="${BATTERY_INFO[temp]}"
     local temp_color="$(get_temp_color "$temp")"
-    echo -ne "Temperature: ${temp_color}${temp}°C${COLORS_RESET} | "
+    echo -ne "Temperature: ${temp_color}${temp}°C${COLORS[RESET]} | "
     
-    local voltage="${BATTERY_INFO_voltage_now}"
-    echo -ne "Voltage: ${COLORS_INFO}${voltage}V${COLORS_RESET} | "
+    local voltage="${BATTERY_INFO[voltage_now]}"
+    echo -ne "Voltage: ${COLORS[INFO]}${voltage}V${COLORS[RESET]} | "
     
-    echo -ne "Current: ${COLORS_INFO}${current}A${COLORS_RESET} | "
+    echo -ne "Current: ${COLORS[INFO]}${current}A${COLORS[RESET]} | "
     
-    local power="${BATTERY_INFO_power_mw}"
-    echo -ne "Power: ${COLORS_INFO}${power}mW${COLORS_RESET}"
+    local power="${BATTERY_INFO[power_mw]}"
+    echo -ne "Power: ${COLORS[INFO]}${power}mW${COLORS[RESET]}"
     
     printf "%*s" $((width - 75)) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
     # Döngü sayısı ve teknoloji
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
     
-    local cycle_count="${BATTERY_INFO_cycle_count}"
-    local cycle_color="${COLORS_NORMAL}"
+    local cycle_count="${BATTERY_INFO[cycle_count]}"
+    local cycle_color="${COLORS[NORMAL]}"
     if (( cycle_count > 800 )); then
-      cycle_color="${COLORS_DANGER}"
+      cycle_color="${COLORS[DANGER]}"
     elif (( cycle_count > 500 )); then
-      cycle_color="${COLORS_WARNING}"
+      cycle_color="${COLORS[WARNING]}"
     fi
     
-    if [ "$cycle_count" != "0" ]; then
-      echo -ne "Cycle Count: ${cycle_color}${cycle_count}${COLORS_RESET} | "
+    if [[ "$cycle_count" != "0" ]]; then
+      echo -ne "Cycle Count: ${cycle_color}${cycle_count}${COLORS[RESET]} | "
     fi
     
-    local technology="${BATTERY_INFO_technology}"
-    if [ "$technology" != "Unknown" ]; then
-      echo -ne "Technology: ${COLORS_INFO}${technology}${COLORS_RESET}"
+    local technology="${BATTERY_INFO[technology]}"
+    if [[ "$technology" != "Unknown" ]]; then
+      echo -ne "Technology: ${COLORS[INFO]}${technology}${COLORS[RESET]}"
     fi
     
     printf "%*s" $((width - 45)) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   fi
   
   # Eğer detaylı görünüm ise termal özeti göster
-  if [ "$VIEW_MODE" == "detayli" || "$VIEW_MODE" == "detailed" || "$VIEW_MODE" == "debug" ]; then
+  if [[ "$VIEW_MODE" == "detayli" || "$VIEW_MODE" == "detailed" || "$VIEW_MODE" == "debug" ]]; then
     # Çizgi
-    echo -ne "${COLORS_BORDER}├"
+    echo -ne "${COLORS[BORDER]}├"
     for ((i=0; i<width; i++)); do
       echo -ne "─"
     done
-    echo -e "┤${COLORS_RESET}"
+    echo -e "┤${COLORS[RESET]}"
     
     # Termal özeti
     if (( ${#THERMAL_ZONE_NAMES[@]} > 0 )); then
       local hottest_index=$(get_hottest_zone)
-      local hottest_name="${THERMAL_ZONE_NAMES_$hottest_index}"
-      local hottest_temp="${THERMAL_ZONE_TEMPS_$hottest_index}"
-      local hottest_trend="${THERMAL_ZONE_TRENDS_$hottest_index}"
+      local hottest_name="${THERMAL_ZONE_NAMES[$hottest_index]}"
+      local hottest_temp="${THERMAL_ZONE_TEMPS[$hottest_index]}"
+      local hottest_trend="${THERMAL_ZONE_TRENDS[$hottest_index]}"
       local temp_color=$(get_temp_color "$hottest_temp")
       
-      echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-      echo -ne "Hottest Zone: ${COLORS_INFO}${hottest_name}${COLORS_RESET} | "
-      echo -ne "Temperature: ${temp_color}${hottest_temp}°C ${hottest_trend}${COLORS_RESET}"
+      echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+      echo -ne "Hottest Zone: ${COLORS[INFO]}${hottest_name}${COLORS[RESET]} | "
+      echo -ne "Temperature: ${temp_color}${hottest_temp}°C ${hottest_trend}${COLORS[RESET]}"
       
       printf "%*s" $((width - 40 - ${#hottest_name})) ""
-      echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+      echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     fi
   fi
   
   # Debug mod ise daha fazla teknik detay
-  if [ "$VIEW_MODE" == "debug" ]; then
+  if [[ "$VIEW_MODE" == "debug" ]]; then
     # Pil yolu
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "Battery Path: ${COLORS_DIM}${BATTERY_INFO_path}${COLORS_RESET}"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "Battery Path: ${COLORS[DIM]}${BATTERY_INFO[path]}${COLORS[RESET]}"
     printf "%*s" $((width - 19 - ${#BATTERY_INFO[path]})) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
     # Bazı ham değerler
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
     echo -ne "Raw Values: "
-    echo -ne "charge_full_design=${BATTERY_INFO_charge_full_design}, "
-    echo -ne "charge_full=${BATTERY_INFO_charge_full}, "
-    echo -ne "charge_now=${BATTERY_INFO_charge_now}"
+    echo -ne "charge_full_design=${BATTERY_INFO[charge_full_design]}, "
+    echo -ne "charge_full=${BATTERY_INFO[charge_full]}, "
+    echo -ne "charge_now=${BATTERY_INFO[charge_now]}"
     printf "%*s" $((width - 80)) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   fi
   
   close_box
   
-  if [ "$display_mode" == "static" ]; then
+  if [[ "$display_mode" == "static" ]]; then
     echo -e "\n$(get_translation "PRESS_KEY")..."
-    read
+    read -n 1 -s
   fi
 }
 
@@ -720,24 +739,24 @@ show_thermal_status() {
   local bar_width=20
   
   if (( ${#THERMAL_ZONE_NAMES[@]} == 0 )); then
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "${COLORS_WARNING}No thermal zones found!${COLORS_RESET}"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "${COLORS[WARNING]}No thermal zones found!${COLORS[RESET]}"
     printf "%*s" $((width - 25)) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   else
     local hottest_index=$(get_hottest_zone)
     
     # Tablo başlığı
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "${COLORS_BOLD}Zone Name"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "${COLORS[BOLD]}Zone Name"
     printf "%-20s" " "
-    echo -ne "Temperature  Trend    Temperature Bar${COLORS_RESET}"
+    echo -ne "Temperature  Trend    Temperature Bar${COLORS[RESET]}"
     printf "%*s" $((width - 65)) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
     # Tablo çizgisi
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "${COLORS_DIM}"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "${COLORS[DIM]}"
     
     # Draw the line using characters instead of seq
     for ((i=0; i<29; i++)); do
@@ -756,22 +775,22 @@ show_thermal_status() {
       echo -ne "─"
     done
     
-    echo -ne "${COLORS_RESET}"
+    echo -ne "${COLORS[RESET]}"
     printf "%*s" $((width - 72)) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
     # Her bölge için bilgi göster
     for ((i=0; i<${#THERMAL_ZONE_NAMES[@]}; i++)); do
-      local zone_name="${THERMAL_ZONE_NAMES_$i}"
-      local temp="${THERMAL_ZONE_TEMPS_$i}"
-      local trend="${THERMAL_ZONE_TRENDS_$i}"
+      local zone_name="${THERMAL_ZONE_NAMES[$i]}"
+      local temp="${THERMAL_ZONE_TEMPS[$i]}"
+      local trend="${THERMAL_ZONE_TRENDS[$i]}"
       local temp_color=$(get_temp_color "$temp")
       
-      echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+      echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
       
       # Bölge adı, en sıcaksa vurgula
-      if [ "$i" == "$hottest_index" ]; then
-        echo -ne "${COLORS_WARNING}${zone_name}${COLORS_RESET}"
+      if [[ "$i" == "$hottest_index" ]]; then
+        echo -ne "${COLORS[WARNING]}${zone_name}${COLORS[RESET]}"
       else
         echo -ne "${zone_name}"
       fi
@@ -779,10 +798,10 @@ show_thermal_status() {
       printf "%-$((29 - ${#zone_name}))s" " "
       
       # Sıcaklık ve trend
-      echo -ne "${temp_color}${temp}°C${COLORS_RESET}"
+      echo -ne "${temp_color}${temp}°C${COLORS[RESET]}"
       printf "%-$((10 - ${#temp} - 2))s" " "
       
-      echo -ne "${temp_color}${trend}${COLORS_RESET}"
+      echo -ne "${temp_color}${trend}${COLORS[RESET]}"
       printf "%-$((8 - ${#trend}))s" " "
       
       # Sıcaklık çubuğu
@@ -798,26 +817,26 @@ show_thermal_status() {
       for ((j=0; j<bar_fill; j++)); do
         echo -ne "█"
       done
-      echo -ne "${COLORS_RESET}"
+      echo -ne "${COLORS[RESET]}"
       
       for ((j=bar_fill; j<bar_width; j++)); do
         echo -ne "░"
       done
       
       printf "%*s" $((width - 72 - bar_width)) ""
-      echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+      echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     done
   fi
   
   close_box
   
   echo -e "\n$(get_translation "PRESS_KEY")..."
-  read
+  read -n 1 -s
 }
 
 # Loglama dizinini oluştur
 create_log_dir() {
-  if [ ! -d "$LOG_DIR" ]; then
+  if [[ ! -d "$LOG_DIR" ]]; then
     mkdir -p "$LOG_DIR" 2>/dev/null || {
       echo "Loglama dizini oluşturulamadı: $LOG_DIR" >&2
       LOG_DIR="$HOME"
@@ -839,15 +858,15 @@ create_log_file() {
   create_log_dir
   
   # CSV başlık
-  if [ "$LOG_FORMAT" == "csv" ]; then
+  if [[ "$LOG_FORMAT" == "csv" ]]; then
     echo "timestamp,capacity,status,health,health_percent,temp,voltage,current,power,cycle_count" > "$log_file"
   
   # JSON başlık
-  elif [ "$LOG_FORMAT" == "json" ]; then
+  elif [[ "$LOG_FORMAT" == "json" ]]; then
     echo "{\"logs\": [" > "$log_file"
   
   # TXT başlık
-  elif [ "$LOG_FORMAT" == "txt" ]; then
+  elif [[ "$LOG_FORMAT" == "txt" ]]; then
     echo "Android Pil İzleme Sistemi Log Dosyası" > "$log_file"
     echo "Başlangıç: $(get_timestamp)" >> "$log_file"
     echo "----------------------------------------" >> "$log_file"
@@ -862,16 +881,16 @@ log_battery_info() {
   local timestamp=$(get_timestamp)
   
   # Log dosyası yoksa oluştur
-  if [ ! -f "$log_file" ]; then
+  if [[ ! -f "$log_file" ]]; then
     log_file=$(create_log_file)
   fi
   
   # CSV formatında kayıt
-  if [ "$LOG_FORMAT" == "csv" ]; then
-    echo "$timestamp,${BATTERY_INFO_capacity},${BATTERY_INFO_status},${BATTERY_INFO_health},${BATTERY_INFO_health_percent},${BATTERY_INFO_temp},${BATTERY_INFO_voltage_now},${BATTERY_INFO_current_now},${BATTERY_INFO_power_mw},${BATTERY_INFO_cycle_count}" >> "$log_file"
+  if [[ "$LOG_FORMAT" == "csv" ]]; then
+    echo "$timestamp,${BATTERY_INFO[capacity]},${BATTERY_INFO[status]},${BATTERY_INFO[health]},${BATTERY_INFO[health_percent]},${BATTERY_INFO[temp]},${BATTERY_INFO[voltage_now]},${BATTERY_INFO[current_now]},${BATTERY_INFO[power_mw]},${BATTERY_INFO[cycle_count]}" >> "$log_file"
   
   # JSON formatında kayıt (düzgün JSON için son kayıtta virgül olmamalı)
-  elif [ "$LOG_FORMAT" == "json" ]; then
+  elif [[ "$LOG_FORMAT" == "json" ]]; then
     # Dosya boyutunu kontrol et
     local file_size=$(wc -c < "$log_file")
     
@@ -885,31 +904,31 @@ log_battery_info() {
     {
       echo "  {"
       echo "    \"timestamp\": \"$timestamp\","
-      echo "    \"capacity\": ${BATTERY_INFO_capacity},"
-      echo "    \"status\": \"${BATTERY_INFO_status}\","
-      echo "    \"health\": \"${BATTERY_INFO_health}\","
-      echo "    \"health_percent\": ${BATTERY_INFO_health_percent},"
-      echo "    \"temp\": ${BATTERY_INFO_temp},"
-      echo "    \"voltage\": ${BATTERY_INFO_voltage_now},"
-      echo "    \"current\": ${BATTERY_INFO_current_now},"
-      echo "    \"power\": ${BATTERY_INFO_power_mw},"
-      echo "    \"cycle_count\": ${BATTERY_INFO_cycle_count}"
+      echo "    \"capacity\": ${BATTERY_INFO[capacity]},"
+      echo "    \"status\": \"${BATTERY_INFO[status]}\","
+      echo "    \"health\": \"${BATTERY_INFO[health]}\","
+      echo "    \"health_percent\": ${BATTERY_INFO[health_percent]},"
+      echo "    \"temp\": ${BATTERY_INFO[temp]},"
+      echo "    \"voltage\": ${BATTERY_INFO[voltage_now]},"
+      echo "    \"current\": ${BATTERY_INFO[current_now]},"
+      echo "    \"power\": ${BATTERY_INFO[power_mw]},"
+      echo "    \"cycle_count\": ${BATTERY_INFO[cycle_count]}"
       echo "  }"
       echo "]}"
     } >> "$log_file"
   
   # TXT formatında kayıt
-  elif [ "$LOG_FORMAT" == "txt" ]; then
+  elif [[ "$LOG_FORMAT" == "txt" ]]; then
     {
       echo "Zaman: $timestamp"
-      echo "Pil Seviyesi: ${BATTERY_INFO_capacity}%"
-      echo "Durum: ${BATTERY_INFO_status}"
-      echo "Sağlık: ${BATTERY_INFO_health} (${BATTERY_INFO_health_percent}%)"
-      echo "Sıcaklık: ${BATTERY_INFO_temp}°C"
-      echo "Voltaj: ${BATTERY_INFO_voltage_now}V"
-      echo "Akım: ${BATTERY_INFO_current_now}A"
-      echo "Güç: ${BATTERY_INFO_power_mw}mW"
-      echo "Döngü Sayısı: ${BATTERY_INFO_cycle_count}"
+      echo "Pil Seviyesi: ${BATTERY_INFO[capacity]}%"
+      echo "Durum: ${BATTERY_INFO[status]}"
+      echo "Sağlık: ${BATTERY_INFO[health]} (${BATTERY_INFO[health_percent]}%)"
+      echo "Sıcaklık: ${BATTERY_INFO[temp]}°C"
+      echo "Voltaj: ${BATTERY_INFO[voltage_now]}V"
+      echo "Akım: ${BATTERY_INFO[current_now]}A"
+      echo "Güç: ${BATTERY_INFO[power_mw]}mW"
+      echo "Döngü Sayısı: ${BATTERY_INFO[cycle_count]}"
       echo "----------------------------------------"
     } >> "$log_file"
   fi
@@ -927,42 +946,42 @@ show_technical_info() {
   
   # Kernel bilgisi
   local kernel_info="$(uname -s) $(uname -r)"
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_HEADER}${kernel_info}${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[HEADER]}${kernel_info}${COLORS[RESET]}"
   printf "%*s" $((width - ${#kernel_info} - 1)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Cihaz modeli ve kod adı
   local model_text="$(get_translation "DEVICE_MODEL"): ${DEVICE_MODEL}"
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "$(get_translation "DEVICE_MODEL"): ${COLORS_INFO}${DEVICE_MODEL}${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "$(get_translation "DEVICE_MODEL"): ${COLORS[INFO]}${DEVICE_MODEL}${COLORS[RESET]}"
   printf "%*s" $((width - ${#model_text} - 1)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   local codename_text="$(get_translation "DEVICE_CODENAME"): ${DEVICE_CODENAME}"
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "$(get_translation "DEVICE_CODENAME"): ${COLORS_INFO}${DEVICE_CODENAME}${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "$(get_translation "DEVICE_CODENAME"): ${COLORS[INFO]}${DEVICE_CODENAME}${COLORS[RESET]}"
   printf "%*s" $((width - ${#codename_text} - 1)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Pil modeli
   local battery_text="$(get_translation "BATTERY_MODEL"): ${BATTERY_MODEL}"
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "$(get_translation "BATTERY_MODEL"): ${COLORS_INFO}${BATTERY_MODEL}${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "$(get_translation "BATTERY_MODEL"): ${COLORS[INFO]}${BATTERY_MODEL}${COLORS[RESET]}"
   printf "%*s" $((width - ${#battery_text} - 1)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Pil teknolojisi ve diğer bilgiler
-  local tech_text="$(get_translation "Technology"): ${BATTERY_INFO_technology}"
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "$(get_translation "Technology"): ${COLORS_INFO}${BATTERY_INFO_technology}${COLORS_RESET}"
+  local tech_text="$(get_translation "Technology"): ${BATTERY_INFO[technology]}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "$(get_translation "Technology"): ${COLORS[INFO]}${BATTERY_INFO[technology]}${COLORS[RESET]}"
   printf "%*s" $((width - ${#tech_text} - 1)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   close_box
   
   echo -e "\n$(get_translation "PRESS_KEY")..."
-  read
+  read -n 1 -s
 }
 
 # Pil ipuçlarını göster
@@ -979,9 +998,9 @@ show_battery_tips() {
   # Bağlamsal uyarılar kontrolü
   local has_temp_warning=0
   local has_health_warning=0
-  local temp="${BATTERY_INFO_temp}"
-  local health_percent="${BATTERY_INFO_health_percent}"
-  local cycle_count="${BATTERY_INFO_cycle_count}"
+  local temp="${BATTERY_INFO[temp]}"
+  local health_percent="${BATTERY_INFO[health_percent]}"
+  local cycle_count="${BATTERY_INFO[cycle_count]}"
   
   if (( $(echo "$temp >= 45" | bc -l) )); then
     has_temp_warning=1
@@ -993,145 +1012,145 @@ show_battery_tips() {
   
   # Bağlamsal uyarılar gösterimi
   if (( has_temp_warning == 1 )); then
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "${COLORS_DANGER}⚠️  WARNING: Battery temperature is too high (${temp}°C)!${COLORS_RESET}"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "${COLORS[DANGER]}⚠️  WARNING: Battery temperature is too high (${temp}°C)!${COLORS[RESET]}"
     printf "%*s" $((width - 55)) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
     
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
     if (( health_percent < 60 )); then
-      echo -ne "${COLORS_DIM}Pil sağlığınız: ${health_percent}% (Kritik düzeyde düşük)${COLORS_RESET}"
+      echo -ne "${COLORS[DIM]}Pil sağlığınız: ${health_percent}% (Kritik düzeyde düşük)${COLORS[RESET]}"
     else
-      echo -ne "${COLORS_DIM}Döngü sayınız: ${cycle_count} (Yüksek)${COLORS_RESET}"
+      echo -ne "${COLORS[DIM]}Döngü sayınız: ${cycle_count} (Yüksek)${COLORS[RESET]}"
     fi
     printf "%*s" $((width - 50)) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "${COLORS_DIM}Kalibrasyon veya pil değişimi düşünebilirsiniz.${COLORS_RESET}"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "${COLORS[DIM]}Kalibrasyon veya pil değişimi düşünebilirsiniz.${COLORS[RESET]}"
     printf "%*s" $((width - 50)) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
     echo -ne "─────────────────────────────────────────────────────────────"
     printf "%*s" $((width - 60)) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   fi
   
   # Temel Kullanım ve Şarj İpuçları
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_HEADER}1. Temel Kullanım ve Şarj${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[HEADER]}1. Temel Kullanım ve Şarj${COLORS[RESET]}"
   printf "%*s" $((width - 27)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Ekran parlaklığını gözünüzü yormayacak, konforlu bir seviyeye ayarlayın."
   printf "%*s" $((width - 77)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Pil seviyesini ideal olarak %20-%85 aralığında tutmaya çalışın."
   printf "%*s" $((width - 67)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Sertifikalı veya orijinal şarj adaptörlerini kullanın."
   printf "%*s" $((width - 58)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Yavaş şarjı (düşük akım) tercih edin (aceleniz yoksa)."
   printf "%*s" $((width - 60)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Sıcaklık Yönetimi İpuçları
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "─────────────────────────────────────────────────────────────"
   printf "%*s" $((width - 60)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_HEADER}2. Sıcaklık Yönetimi${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[HEADER]}2. Sıcaklık Yönetimi${COLORS[RESET]}"
   printf "%*s" $((width - 24)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Telefonun tekrarlayan şekilde aşırı ısınmasından kaçının."
   printf "%*s" $((width - 64)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Doğrudan güneş ışığı veya çok sıcak ortamlardan uzak tutun."
   printf "%*s" $((width - 66)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Isıyı hapseden kılıflardan kaçının veya çıkarın."
   printf "%*s" $((width - 53)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Şarj sırasında serin yüzeye koyun."
   printf "%*s" $((width - 40)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Uygulama ve Arka Plan İşlemleri
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "─────────────────────────────────────────────────────────────"
   printf "%*s" $((width - 60)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_HEADER}3. Uygulama ve Arka Plan İşlemleri${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[HEADER]}3. Uygulama ve Arka Plan İşlemleri${COLORS[RESET]}"
   printf "%*s" $((width - 39)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Uygulamaların arka plan aktivitelerini ve izinlerini kontrol edin/kısıtlayın."
   printf "%*s" $((width - 79)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Arka plan yenilemeyi sadece kritik uygulamalar için açık tutun."
   printf "%*s" $((width - 67)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Tüm uygulamalar için pil optimizasyonunu etkinleştirin."
   printf "%*s" $((width - 60)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Sistem ve Bağlantı
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "─────────────────────────────────────────────────────────────"
   printf "%*s" $((width - 60)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_HEADER}4. Sistem ve Bağlantı${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[HEADER]}4. Sistem ve Bağlantı${COLORS[RESET]}"
   printf "%*s" $((width - 24)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Kullanılmayan Wi-Fi, Bluetooth, NFC, Konum'u kapatın."
   printf "%*s" $((width - 60)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Mümkünse 5G yerine 4G kullanın."
   printf "%*s" $((width - 35)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "• Animasyonları azaltın/kapatın."
   printf "%*s" $((width - 33)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   close_box
   
   echo -e "\nMenü'ye dönmek için herhangi bir tuşa basın..."
-  read
+  read -n 1 -s
 }
 
 # Pil sağlık tanılama
@@ -1146,129 +1165,129 @@ show_battery_diagnostics() {
   local width=$((TERMINAL_WIDTH - 8))
   
   # Pil seviyesi ve çubuk
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   
-  local capacity="${BATTERY_INFO_capacity}"
-  local capacity_color="${COLORS_NORMAL}"
+  local capacity="${BATTERY_INFO[capacity]}"
+  local capacity_color="${COLORS[NORMAL]}"
   if (( capacity < 20 )); then
-    capacity_color="${COLORS_BATTERY_LOW}"
+    capacity_color="${COLORS[BATTERY_LOW]}"
   elif (( capacity < 50 )); then
-    capacity_color="${COLORS_BATTERY_MID}"
+    capacity_color="${COLORS[BATTERY_MID]}"
   else
-    capacity_color="${COLORS_BATTERY_HIGH}"
+    capacity_color="${COLORS[BATTERY_HIGH]}"
   fi
   
-  echo -ne "Current Battery Level: ${capacity_color}${capacity}%${COLORS_RESET}"
+  echo -ne "Current Battery Level: ${capacity_color}${capacity}%${COLORS[RESET]}"
   printf "%*s" $((width - 30 - ${#capacity})) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Durum bilgisi
-  local status="${BATTERY_INFO_status}"
-  local status_color="${COLORS_NORMAL}"
+  local status="${BATTERY_INFO[status]}"
+  local status_color="${COLORS[NORMAL]}"
   case "$status" in
     "Charging") 
       status="Charging"
-      status_color="${COLORS_SUCCESS}"
+      status_color="${COLORS[SUCCESS]}"
       ;;
     "Discharging") 
       status="Discharging"
-      status_color="${COLORS_WARNING}"
+      status_color="${COLORS[WARNING]}"
       ;;
     "Full") 
       status="Full"
-      status_color="${COLORS_SUCCESS}"
+      status_color="${COLORS[SUCCESS]}"
       ;;
     "Not charging") 
       status="Not charging"
-      status_color="${COLORS_WARNING}"
+      status_color="${COLORS[WARNING]}"
       ;;
     *) 
       status="Unknown"
-      status_color="${COLORS_NORMAL}"
+      status_color="${COLORS[NORMAL]}"
       ;;
   esac
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "Charging Status: ${status_color}${status}${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "Charging Status: ${status_color}${status}${COLORS[RESET]}"
   printf "%*s" $((width - 27 - ${#status})) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Şarj hızı ve kalan süre tahmini (yeni eklenen)
-  local current="${BATTERY_INFO_current_now}"
+  local current="${BATTERY_INFO[current_now]}"
   local charging_speed=$(get_charging_speed "$current" "$status")
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "Charging Type: ${charging_speed} | "
   
-  local charge_full="${BATTERY_INFO_charge_full}"
+  local charge_full="${BATTERY_INFO[charge_full]}"
   local est_time=$(estimate_remaining_time "$capacity" "$charge_full" "$current" "$status")
-  if [ -n "$est_time" && "$est_time" != "Unknown" ]; then
+  if [[ -n "$est_time" && "$est_time" != "Unknown" ]]; then
     echo -ne "Estimated: ${est_time}"
   else
-    echo -ne "Estimated: ${COLORS_NORMAL}N/A${COLORS_RESET}"
+    echo -ne "Estimated: ${COLORS[NORMAL]}N/A${COLORS[RESET]}"
   fi
   
   printf "%*s" $((width - 65)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Sağlık değerlendirmesi
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "─────────────────────────────────────────────────────────────"
   printf "%*s" $((width - 60)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_HEADER}Health Assessment${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[HEADER]}Health Assessment${COLORS[RESET]}"
   printf "%*s" $((width - 18)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Kapasite Değerlendirmesi
-  local health_percent="${BATTERY_INFO_health_percent}"
-  local health_color="${COLORS_SUCCESS}"
+  local health_percent="${BATTERY_INFO[health_percent]}"
+  local health_color="${COLORS[SUCCESS]}"
   local health_desc="Excellent"
   
   if (( health_percent < 60 )); then
-    health_color="${COLORS_DANGER}"
+    health_color="${COLORS[DANGER]}"
     health_desc="Critical (Replacement Recommended)"
   elif (( health_percent < 80 )); then
-    health_color="${COLORS_WARNING}"
+    health_color="${COLORS[WARNING]}"
     health_desc="Poor"
   elif (( health_percent < 90 )); then
-    health_color="${COLORS_WARNING}"
+    health_color="${COLORS[WARNING]}"
     health_desc="Good"
   fi
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "Battery Capacity: ${health_color}${health_percent}% (${health_desc})${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "Battery Capacity: ${health_color}${health_percent}% (${health_desc})${COLORS[RESET]}"
   printf "%*s" $((width - 28 - ${#health_percent} - ${#health_desc})) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   
   # Döngü Sayısı Değerlendirmesi
-  local cycle_count="${BATTERY_INFO_cycle_count}"
-  local cycle_color="${COLORS_SUCCESS}"
+  local cycle_count="${BATTERY_INFO[cycle_count]}"
+  local cycle_color="${COLORS[SUCCESS]}"
   local cycle_desc="Low Usage"
   
   if (( cycle_count > 800 )); then
-    cycle_color="${COLORS_DANGER}"
+    cycle_color="${COLORS[DANGER]}"
     cycle_desc="Very High (Replacement Advised)"
   elif (( cycle_count > 500 )); then
-    cycle_color="${COLORS_WARNING}"
+    cycle_color="${COLORS[WARNING]}"
     cycle_desc="High"
   elif (( cycle_count > 300 )); then
-    cycle_color="${COLORS_INFO}"
+    cycle_color="${COLORS[INFO]}"
     cycle_desc="Normal"
   fi
   
-  if [ "$cycle_count" != "0" ]; then
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "Cycle Count: ${cycle_color}${cycle_count} (${cycle_desc})${COLORS_RESET}"
+  if [[ "$cycle_count" != "0" ]]; then
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "Cycle Count: ${cycle_color}${cycle_count} (${cycle_desc})${COLORS[RESET]}"
     printf "%*s" $((width - 23 - ${#cycle_count} - ${#cycle_desc})) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   fi
   
   # Sıcaklık Değerlendirmesi
-  local temp="${BATTERY_INFO_temp}"
+  local temp="${BATTERY_INFO[temp]}"
   local temp_color="$(get_temp_color "$temp")"
   local temp_desc="Normal"
   
@@ -1279,47 +1298,47 @@ show_battery_diagnostics() {
   elif (( $(echo "$temp >= 40" | bc -l) )); then
     temp_desc="High"
   elif (( $(echo "$temp <= 10" | bc -l) )); then
-    temp_color="${COLORS_WARNING}"
+    temp_color="${COLORS[WARNING]}"
     temp_desc="Very Low"
   fi
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "Battery Temperature: ${temp_color}${temp}°C (${temp_desc})${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "Battery Temperature: ${temp_color}${temp}°C (${temp_desc})${COLORS[RESET]}"
   printf "%*s" $((width - 32 - ${#temp} - ${#temp_desc})) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Genel Değerlendirme
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "─────────────────────────────────────────────────────────────"
   printf "%*s" $((width - 60)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_HEADER}Overall Assessment${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[HEADER]}Overall Assessment${COLORS[RESET]}"
   printf "%*s" $((width - 20)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   
-  local overall_color="${COLORS_SUCCESS}"
+  local overall_color="${COLORS[SUCCESS]}"
   local overall_text="Your battery is in good condition and working normally."
   
   if (( health_percent < 60 || cycle_count > 800 || $(echo "$temp >= 50" | bc -l) )); then
-    overall_color="${COLORS_DANGER}"
+    overall_color="${COLORS[DANGER]}"
     overall_text="Your battery is in critical condition! Immediate action/replacement may be needed."
   elif (( health_percent < 80 || cycle_count > 500 || $(echo "$temp >= 45" | bc -l) )); then
-    overall_color="${COLORS_WARNING}"
+    overall_color="${COLORS[WARNING]}"
     overall_text="Your battery appears to have issues. Taking precautions is recommended."
   fi
   
-  echo -ne "${overall_color}${overall_text}${COLORS_RESET}"
+  echo -ne "${overall_color}${overall_text}${COLORS[RESET]}"
   printf "%*s" $((width - ${#overall_text})) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   close_box
   
   echo -e "\n$(get_translation "PRESS_KEY")..."
-  read
+  read -n 1 -s
 }
 
 # Dil çevirisine yeni eklemeleri yapıyorum
@@ -1327,7 +1346,7 @@ get_translation() {
   local key="$1"
   local result=""
   
-  if [ "$LANGUAGE" == "tr" ]; then
+  if [[ "$LANGUAGE" == "tr" ]]; then
     case "$key" in
       "SETTINGS") result="Ayarlar" ;;
       "CURRENT_STATUS") result="Anlık Durum" ;;
@@ -1377,7 +1396,7 @@ get_translation() {
       "Your battery is in good condition and working normally.") result="Piliniz iyi durumda ve normal çalışıyor." ;;
       "Your battery appears to have issues. Taking precautions is recommended.") result="Pilinizde sorunlar görünüyor. Önlem almanız önerilir." ;;
       "Your battery is in critical condition! Immediate action/replacement may be needed.") result="Piliniz kritik durumda! Acil müdahale/değişim gerekebilir." ;;
-      "Consider battery calibration or replacement.") result="Pil kalibrasyonu veya değişimi düşünebilirsiniz.${COLORS_RESET}" ;;
+      "Consider battery calibration or replacement.") result="Pil kalibrasyonu veya değişimi düşünebilirsiniz.${COLORS[RESET]}" ;;
       "Excellent") result="Mükemmel" ;;
       "Good") result="İyi" ;;
       "Poor") result="Zayıf" ;;
@@ -1426,7 +1445,7 @@ get_translation() {
       "MONITORING_STOPPED") result="İzleme durdu. Ana menüye dönülüyor..." ;;
       *) result="$key" ;;
     esac
-  elif [ "$LANGUAGE" == "ru" ]; then
+  elif [[ "$LANGUAGE" == "ru" ]]; then
     case "$key" in
       "SETTINGS") result="Настройки" ;;
       "CURRENT_STATUS") result="Текущее состояние" ;;
@@ -1525,7 +1544,7 @@ get_translation() {
       "MONITORING_STOPPED") result="Мониторинг остановлен. Возвращение в главное меню..." ;;
       *) result="$key" ;;
     esac
-  elif [ "$LANGUAGE" == "zh" ]; then
+  elif [[ "$LANGUAGE" == "zh" ]]; then
     case "$key" in
       "SETTINGS") result="设置" ;;
       "CURRENT_STATUS") result="当前状态" ;;
@@ -1624,7 +1643,7 @@ get_translation() {
       "MONITORING_STOPPED") result="监控已停止。正在返回主菜单..." ;;
       *) result="$key" ;;
     esac
-  elif [ "$LANGUAGE" == "ja" ]; then
+  elif [[ "$LANGUAGE" == "ja" ]]; then
     case "$key" in
       "SETTINGS") result="設定" ;;
       "CURRENT_STATUS") result="現在の状態" ;;
@@ -1723,7 +1742,7 @@ get_translation() {
       "MONITORING_STOPPED") result="モニタリングが停止しました。メインメニューに戻ります..." ;;
       *) result="$key" ;;
     esac
-  elif [ "$LANGUAGE" == "ptbr" ]; then
+  elif [[ "$LANGUAGE" == "ptbr" ]]; then
     case "$key" in
       "SETTINGS") result="Configurações" ;;
       "CURRENT_STATUS") result="Estado Atual" ;;
@@ -1822,7 +1841,7 @@ get_translation() {
       "MONITORING_STOPPED") result="Monitoramento parado. Retornando ao menu principal..." ;;
       *) result="$key" ;;
     esac
-  elif [ "$LANGUAGE" == "es" ]; then
+  elif [[ "$LANGUAGE" == "es" ]]; then
     case "$key" in
       "SETTINGS") result="Ajustes" ;;
       "CURRENT_STATUS") result="Estado Actual" ;;
@@ -1921,7 +1940,7 @@ get_translation() {
       "MONITORING_STOPPED") result="Monitoreo detenido. Volviendo al menú principal..." ;;
       *) result="$key" ;;
     esac
-  elif [ "$LANGUAGE" == "it" ]; then
+  elif [[ "$LANGUAGE" == "it" ]]; then
     case "$key" in
       "SETTINGS") result="Impostazioni" ;;
       "CURRENT_STATUS") result="Stato Attuale" ;;
@@ -2020,7 +2039,7 @@ get_translation() {
       "MONITORING_STOPPED") result="Monitoraggio interrotto. Ritorno al menu principale..." ;;
       *) result="$key" ;;
     esac
-  elif [ "$LANGUAGE" == "fr" ]; then
+  elif [[ "$LANGUAGE" == "fr" ]]; then
     case "$key" in
       "SETTINGS") result="Paramètres" ;;
       "CURRENT_STATUS") result="État Actuel" ;;
@@ -2119,7 +2138,7 @@ get_translation() {
       "MONITORING_STOPPED") result="Surveillance arrêtée. Retour au menu principal..." ;;
       *) result="$key" ;;
     esac
-  elif [ "$LANGUAGE" == "de" ]; then
+  elif [[ "$LANGUAGE" == "de" ]]; then
     case "$key" in
       "SETTINGS") result="Einstellungen" ;;
       "CURRENT_STATUS") result="Aktueller Status" ;;
@@ -2218,7 +2237,7 @@ get_translation() {
       "MONITORING_STOPPED") result="Überwachung gestoppt. Rückkehr zum Hauptmenü..." ;;
       *) result="$key" ;;
     esac
-  elif [ "$LANGUAGE" == "hi" ]; then
+  elif [[ "$LANGUAGE" == "hi" ]]; then
     case "$key" in
       "SETTINGS") result="सेटिंग्स" ;;
       "CURRENT_STATUS") result="वर्तमान स्थिति" ;;
@@ -2317,7 +2336,7 @@ get_translation() {
       "MONITORING_STOPPED") result="मॉनिटरिंग रुक गई है। मुख्य मेनू पर वापस जा रहे हैं..." ;;
       *) result="$key" ;;
     esac
-  elif [ "$LANGUAGE" == "pl" ]; then
+  elif [[ "$LANGUAGE" == "pl" ]]; then
     case "$key" in
       "SETTINGS") result="Ustawienia" ;;
       "CURRENT_STATUS") result="Aktualny Status" ;;
@@ -2416,7 +2435,7 @@ get_translation() {
       "MONITORING_STOPPED") result="Monitoring zatrzymany. Powrót do menu głównego..." ;;
       *) result="$key" ;;
     esac
-  elif [ "$LANGUAGE" == "bn" ]; then
+  elif [[ "$LANGUAGE" == "bn" ]]; then
     case "$key" in
       "SETTINGS") result="সেটিংস" ;;
       "CURRENT_STATUS") result="বর্তমান অবস্থা" ;;
@@ -2445,7 +2464,7 @@ get_translation() {
       "ITERATION") result="পুনরাবৃত্তি" ;;
           *) result="$key" ;;
     esac
-  elif [ "$LANGUAGE" == "en" ]; then
+  elif [[ "$LANGUAGE" == "en" ]]; then
     case "$key" in
       "SETTINGS") result="Settings" ;;
       "CURRENT_STATUS") result="Current Status" ;;
@@ -2522,62 +2541,62 @@ show_menu() {
   
   local width=$((TERMINAL_WIDTH - 8))
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[1]${COLORS_RESET} ${COLORS_MENU_ITEM}🔋 $(get_translation "CURRENT_STATUS")${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[1]${COLORS[RESET]} ${COLORS[MENU_ITEM]}🔋 $(get_translation "CURRENT_STATUS")${COLORS[RESET]}"
   printf "%*s" $((width - 21)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[2]${COLORS_RESET} ${COLORS_MENU_ITEM}📊 $(get_translation "LIVE_MONITORING")${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[2]${COLORS[RESET]} ${COLORS[MENU_ITEM]}📊 $(get_translation "LIVE_MONITORING")${COLORS[RESET]}"
   printf "%*s" $((width - 28)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[3]${COLORS_RESET} ${COLORS_MENU_ITEM}⚙️  $(get_translation "SETTINGS")${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[3]${COLORS[RESET]} ${COLORS[MENU_ITEM]}⚙️  $(get_translation "SETTINGS")${COLORS[RESET]}"
   printf "%*s" $((width - 15)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[4]${COLORS_RESET} ${COLORS_MENU_ITEM}💡 $(get_translation "BATTERY_TIPS")${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[4]${COLORS[RESET]} ${COLORS[MENU_ITEM]}💡 $(get_translation "BATTERY_TIPS")${COLORS[RESET]}"
   printf "%*s" $((width - 19)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[5]${COLORS_RESET} ${COLORS_MENU_ITEM}❤️  $(get_translation "BATTERY_DIAGNOSTICS")${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[5]${COLORS[RESET]} ${COLORS[MENU_ITEM]}❤️  $(get_translation "BATTERY_DIAGNOSTICS")${COLORS[RESET]}"
   printf "%*s" $((width - 26)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[6]${COLORS_RESET} ${COLORS_MENU_ITEM}🌡️  $(get_translation "THERMAL_STATUS")${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[6]${COLORS[RESET]} ${COLORS[MENU_ITEM]}🌡️  $(get_translation "THERMAL_STATUS")${COLORS[RESET]}"
   printf "%*s" $((width - 21)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[7]${COLORS_RESET} ${COLORS_MENU_ITEM}🛠️  $(get_translation "TECHNICAL_INFO")${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[7]${COLORS[RESET]} ${COLORS[MENU_ITEM]}🛠️  $(get_translation "TECHNICAL_INFO")${COLORS[RESET]}"
   printf "%*s" $((width - 21)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[8]${COLORS_RESET} ${COLORS_MENU_ITEM}ℹ️  $(get_translation "ABOUT")${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[8]${COLORS[RESET]} ${COLORS[MENU_ITEM]}ℹ️  $(get_translation "ABOUT")${COLORS[RESET]}"
   printf "%*s" $((width - 24)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[0]${COLORS_RESET} ${COLORS_MENU_ITEM}❌ $(get_translation "EXIT")${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[0]${COLORS[RESET]} ${COLORS[MENU_ITEM]}❌ $(get_translation "EXIT")${COLORS[RESET]}"
   printf "%*s" $((width - 19)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Durum bilgisi
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "─────────────────────────────────────────────────────────────"
   printf "%*s" $((width - 60)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   # Pil durumu özeti
   get_battery_info
-  local status="${BATTERY_INFO_status}"
-  local capacity="${BATTERY_INFO_capacity}"
-  local temp="${BATTERY_INFO_temp}"
+  local status="${BATTERY_INFO[status]}"
+  local capacity="${BATTERY_INFO[capacity]}"
+  local temp="${BATTERY_INFO[temp]}"
   
   local status_tr="Unknown"
   case "$status" in
@@ -2588,35 +2607,35 @@ show_menu() {
     *) status_tr="$status" ;;
   esac
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "Battery: "
   
   # Pil yüzdesi ve rengi
-  local capacity_color="${COLORS_NORMAL}"
+  local capacity_color="${COLORS[NORMAL]}"
   if (( capacity < 20 )); then
-    capacity_color="${COLORS_BATTERY_LOW}"
+    capacity_color="${COLORS[BATTERY_LOW]}"
   elif (( capacity < 50 )); then
-    capacity_color="${COLORS_BATTERY_MID}"
+    capacity_color="${COLORS[BATTERY_MID]}"
   else
-    capacity_color="${COLORS_BATTERY_HIGH}"
+    capacity_color="${COLORS[BATTERY_HIGH]}"
   fi
-  echo -ne "${capacity_color}${capacity}%${COLORS_RESET}"
+  echo -ne "${capacity_color}${capacity}%${COLORS[RESET]}"
   
   echo -ne " | Status: ${status_tr} | Temperature: ${temp}°C"
   
   # Görünüm modu, tema ve log durumu
   printf "%*s" $((width - 50 - ${#status_tr})) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "View: ${VIEW_MODE} | Theme: ${THEME} | Logging: "
   if (( LOGGING_ENABLED == 1 )); then
-    echo -ne "${COLORS_SUCCESS}Enabled${COLORS_RESET}"
+    echo -ne "${COLORS[SUCCESS]}Enabled${COLORS[RESET]}"
   else
-    echo -ne "${COLORS_WARNING}Disabled${COLORS_RESET}"
+    echo -ne "${COLORS[WARNING]}Disabled${COLORS[RESET]}"
   fi
   printf "%*s" $((width - 50)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   close_box
   
@@ -2644,7 +2663,7 @@ start_live_monitoring() {
   local log_file=""
   
   # Set up trap to return to main menu when Ctrl+C is pressed
-  trap 'echo -e "\n${COLORS_SUCCESS}İzleme durdu. Ana menüye dönülüyor...${COLORS_RESET}"; sleep 1; return' INT
+  trap 'echo -e "\n${COLORS[SUCCESS]}İzleme durdu. Ana menüye dönülüyor...${COLORS[RESET]}"; sleep 1; return' INT
   
   # Loglama açıksa log dosyası oluştur
   if (( LOGGING_ENABLED == 1 )); then
@@ -2675,11 +2694,11 @@ start_live_monitoring() {
     show_battery_status
     
     # İterasyon sayısını ve çıkış yönergesini göster
-    echo -e "\n${COLORS_INFO}İterasyon: $iteration | Yenileme: ${REFRESH_RATE}s${COLORS_RESET}"
-    echo -e "${COLORS_WARNING}Çıkmak ve ana menüye dönmek için CTRL+C'ye basın${COLORS_RESET}"
+    echo -e "\n${COLORS[INFO]}İterasyon: $iteration | Yenileme: ${REFRESH_RATE}s${COLORS[RESET]}"
+    echo -e "${COLORS[WARNING]}Çıkmak ve ana menüye dönmek için CTRL+C'ye basın${COLORS[RESET]}"
     
     # Loglama yapılsın mı?
-    if (( LOGGING_ENABLED == 1 )) && [ -n "$log_file" ]; then
+    if (( LOGGING_ENABLED == 1 )) && [[ -n "$log_file" ]]; then
       log_battery_info "$log_file" > /dev/null
     fi
     
@@ -2699,51 +2718,51 @@ show_settings() {
     
     local width=$((TERMINAL_WIDTH - 8))
     
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "${COLORS_MENU_NUMBER}[1]${COLORS_RESET} ${COLORS_MENU_ITEM}"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "${COLORS[MENU_NUMBER]}[1]${COLORS[RESET]} ${COLORS[MENU_ITEM]}"
     if (( LOGGING_ENABLED == 1 )); then
-      echo -ne "${COLORS_SUCCESS}$(get_translation "DISABLE")${COLORS_RESET}"
+      echo -ne "${COLORS[SUCCESS]}$(get_translation "DISABLE")${COLORS[RESET]}"
     else
-      echo -ne "${COLORS_WARNING}$(get_translation "ENABLE")${COLORS_RESET}"
+      echo -ne "${COLORS[WARNING]}$(get_translation "ENABLE")${COLORS[RESET]}"
     fi
     echo -ne " $(get_translation "LOGGING")"
     printf "%*s" $((width - 20)) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "${COLORS_MENU_NUMBER}[2]${COLORS_RESET} ${COLORS_MENU_ITEM}$(get_translation "SET_LOG_DIR") (${COLORS_DIM}${LOG_DIR}${COLORS_RESET})"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "${COLORS[MENU_NUMBER]}[2]${COLORS[RESET]} ${COLORS[MENU_ITEM]}$(get_translation "SET_LOG_DIR") (${COLORS[DIM]}${LOG_DIR}${COLORS[RESET]})"
     printf "%*s" $((width - 25 - ${#LOG_DIR})) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "${COLORS_MENU_NUMBER}[3]${COLORS_RESET} ${COLORS_MENU_ITEM}$(get_translation "SELECT_LOG_FORMAT") (${LOG_FORMAT})${COLORS_RESET}"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "${COLORS[MENU_NUMBER]}[3]${COLORS[RESET]} ${COLORS[MENU_ITEM]}$(get_translation "SELECT_LOG_FORMAT") (${LOG_FORMAT})${COLORS[RESET]}"
     printf "%*s" $((width - 30 - ${#LOG_FORMAT})) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "${COLORS_MENU_NUMBER}[4]${COLORS_RESET} ${COLORS_MENU_ITEM}$(get_translation "SET_REFRESH_RATE") (${REFRESH_RATE} sec)${COLORS_RESET}"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "${COLORS[MENU_NUMBER]}[4]${COLORS[RESET]} ${COLORS[MENU_ITEM]}$(get_translation "SET_REFRESH_RATE") (${REFRESH_RATE} sec)${COLORS[RESET]}"
     printf "%*s" $((width - 35 - ${#REFRESH_RATE})) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "${COLORS_MENU_NUMBER}[5]${COLORS_RESET} ${COLORS_MENU_ITEM}$(get_translation "SELECT_VIEW_MODE") (${VIEW_MODE})${COLORS_RESET}"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "${COLORS[MENU_NUMBER]}[5]${COLORS[RESET]} ${COLORS[MENU_ITEM]}$(get_translation "SELECT_VIEW_MODE") (${VIEW_MODE})${COLORS[RESET]}"
     printf "%*s" $((width - 30 - ${#VIEW_MODE})) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "${COLORS_MENU_NUMBER}[6]${COLORS_RESET} ${COLORS_MENU_ITEM}$(get_translation "SELECT_COLOR_THEME") (${THEME})${COLORS_RESET}"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "${COLORS[MENU_NUMBER]}[6]${COLORS[RESET]} ${COLORS[MENU_ITEM]}$(get_translation "SELECT_COLOR_THEME") (${THEME})${COLORS[RESET]}"
     printf "%*s" $((width - 32 - ${#THEME})) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "${COLORS_MENU_NUMBER}[7]${COLORS_RESET} ${COLORS_MENU_ITEM}$(get_translation "LANGUAGE") (${LANGUAGE})${COLORS_RESET}"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "${COLORS[MENU_NUMBER]}[7]${COLORS[RESET]} ${COLORS[MENU_ITEM]}$(get_translation "LANGUAGE") (${LANGUAGE})${COLORS[RESET]}"
     printf "%*s" $((width - 25 - ${#LANGUAGE})) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
-    echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-    echo -ne "${COLORS_MENU_NUMBER}[0]${COLORS_RESET} ${COLORS_MENU_ITEM}$(get_translation "RETURN_MAIN_MENU")${COLORS_RESET}"
+    echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+    echo -ne "${COLORS[MENU_NUMBER]}[0]${COLORS[RESET]} ${COLORS[MENU_ITEM]}$(get_translation "RETURN_MAIN_MENU")${COLORS[RESET]}"
     printf "%*s" $((width - 24)) ""
-    echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+    echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
     
     close_box
     
@@ -2756,14 +2775,14 @@ show_settings() {
         # Toggle logging
         if (( LOGGING_ENABLED == 1 )); then
           LOGGING_ENABLED=0
-          if [ "$LANGUAGE" == "tr" ]; then
+          if [[ "$LANGUAGE" == "tr" ]]; then
             echo "Loglama kapatıldı."
           else
             echo "Logging disabled."
           fi
         else
           LOGGING_ENABLED=1
-          if [ "$LANGUAGE" == "tr" ]; then
+          if [[ "$LANGUAGE" == "tr" ]]; then
             echo "Loglama açıldı. Dizin: $LOG_DIR, Format: $LOG_FORMAT"
           else
             echo "Logging enabled. Directory: $LOG_DIR, Format: $LOG_FORMAT"
@@ -2775,16 +2794,16 @@ show_settings() {
         ;;
       2)
         # Set log directory
-        if [ "$LANGUAGE" == "tr" ]; then
+        if [[ "$LANGUAGE" == "tr" ]]; then
           echo -e "\nYeni log dizinini girin (varsayılan için boş bırakın):"
         else
           echo -e "\nEnter new log directory (leave empty for default):"
         fi
         read -e new_log_dir
-        if [ -n "$new_log_dir" ]; then
+        if [[ -n "$new_log_dir" ]]; then
           LOG_DIR="$new_log_dir"
           create_log_dir
-          if [ "$LANGUAGE" == "tr" ]; then
+          if [[ "$LANGUAGE" == "tr" ]]; then
             echo "Log dizini ayarlandı: $LOG_DIR"
           else
             echo "Log directory set to: $LOG_DIR"
@@ -2792,7 +2811,7 @@ show_settings() {
         else
           LOG_DIR="$HOME/.config/bbms/logs"
           create_log_dir
-          if [ "$LANGUAGE" == "tr" ]; then
+          if [[ "$LANGUAGE" == "tr" ]]; then
             echo "Log dizini varsayılan değere ayarlandı: $LOG_DIR"
           else
             echo "Log directory set to default: $LOG_DIR"
@@ -2803,7 +2822,7 @@ show_settings() {
         ;;
       3)
         # Select log format
-        if [ "$LANGUAGE" == "tr" ]; then
+        if [[ "$LANGUAGE" == "tr" ]]; then
           echo -e "\nLog formatını seçin (csv/json/txt):"
         else
           echo -e "\nSelect log format (csv/json/txt):"
@@ -2814,14 +2833,14 @@ show_settings() {
           json|JSON) LOG_FORMAT="json" ;;
           txt|TXT) LOG_FORMAT="txt" ;;
           *) 
-            if [ "$LANGUAGE" == "tr" ]; then
+            if [[ "$LANGUAGE" == "tr" ]]; then
               echo "Geçersiz format. csv, json veya txt kullanın."
             else
               echo "Invalid format. Use csv, json or txt."
             fi
             ;;
         esac
-        if [ "$LANGUAGE" == "tr" ]; then
+        if [[ "$LANGUAGE" == "tr" ]]; then
           echo "Log formatı ayarlandı: $LOG_FORMAT"
         else
           echo "Log format set to: $LOG_FORMAT"
@@ -2831,15 +2850,15 @@ show_settings() {
         ;;
       4)
         # Set refresh rate
-        if [ "$LANGUAGE" == "tr" ]; then
+        if [[ "$LANGUAGE" == "tr" ]]; then
           echo -e "\nYenileme aralığını saniye olarak girin (varsayılan: 5):"
         else
           echo -e "\nEnter refresh rate in seconds (default: 5):"
         fi
         read -e new_refresh_rate
-        if [ "$new_refresh_rate" =~ ^[0-9]+$ ]; then
+        if [[ "$new_refresh_rate" =~ ^[0-9]+$ ]]; then
           if (( new_refresh_rate < 1 )); then
-            if [ "$LANGUAGE" == "tr" ]; then
+            if [[ "$LANGUAGE" == "tr" ]]; then
               echo "Uyarı: Yenileme aralığı 1 saniyeden az olamaz. 1 saniye kullanılacak." >&2
             else
               echo "Warning: Refresh rate cannot be less than 1 second. Using 1 second." >&2
@@ -2847,14 +2866,14 @@ show_settings() {
             REFRESH_RATE=1
           else
             REFRESH_RATE="$new_refresh_rate"
-            if [ "$LANGUAGE" == "tr" ]; then
+            if [[ "$LANGUAGE" == "tr" ]]; then
               echo "Yenileme aralığı ayarlandı: $REFRESH_RATE saniye"
             else
               echo "Refresh rate set to: $REFRESH_RATE seconds"
             fi
           fi
         else
-          if [ "$LANGUAGE" == "tr" ]; then
+          if [[ "$LANGUAGE" == "tr" ]]; then
             echo "Geçersiz değer. Sayı girmelisiniz."
           else
             echo "Invalid value. You must enter a number."
@@ -2865,7 +2884,7 @@ show_settings() {
         ;;
       5)
         # Select view mode
-        if [ "$LANGUAGE" == "tr" ]; then
+        if [[ "$LANGUAGE" == "tr" ]]; then
           echo -e "\nGörünüm modunu seçin (minimal/detailed/debug):"
         else
           echo -e "\nSelect view mode (minimal/detailed/debug):"
@@ -2876,14 +2895,14 @@ show_settings() {
           detailed|DETAILED|detayli|DETAYLI) VIEW_MODE="detailed" ;;
           debug|DEBUG) VIEW_MODE="debug" ;;
           *) 
-            if [ "$LANGUAGE" == "tr" ]; then
+            if [[ "$LANGUAGE" == "tr" ]]; then
               echo "Geçersiz mod. minimal, detailed veya debug kullanın."
             else
               echo "Invalid mode. Use minimal, detailed or debug."
             fi
             ;;
         esac
-        if [ "$LANGUAGE" == "tr" ]; then
+        if [[ "$LANGUAGE" == "tr" ]]; then
           echo "Görünüm modu ayarlandı: $VIEW_MODE"
         else
           echo "View mode set to: $VIEW_MODE"
@@ -2893,7 +2912,7 @@ show_settings() {
         ;;
       6)
         # Select color theme
-        if [ "$LANGUAGE" == "tr" ]; then
+        if [[ "$LANGUAGE" == "tr" ]]; then
           echo -e "\nRenk temasını seçin (dark/light/gruvbox/nord/dracula):"
         else
           echo -e "\nSelect color theme (dark/light/gruvbox/nord/dracula):"
@@ -2921,14 +2940,14 @@ show_settings() {
             set_theme "$THEME"
             ;;
           *) 
-            if [ "$LANGUAGE" == "tr" ]; then
+            if [[ "$LANGUAGE" == "tr" ]]; then
               echo "Geçersiz tema. dark, light, gruvbox, nord veya dracula kullanın."
             else
               echo "Invalid theme. Use dark, light, gruvbox, nord or dracula."
             fi
             ;;
         esac
-        if [ "$LANGUAGE" == "tr" ]; then
+        if [[ "$LANGUAGE" == "tr" ]]; then
           echo "Renk teması ayarlandı: $THEME"
         else
           echo "Color theme set to: $THEME"
@@ -2958,7 +2977,7 @@ show_language_selection() {
   clear
   
   local title=""
-  if [ "$LANGUAGE" == "tr" ]; then
+  if [[ "$LANGUAGE" == "tr" ]]; then
     title="Dil Seçimi"
   else
     title="Language Selection"
@@ -2968,75 +2987,75 @@ show_language_selection() {
   
   local width=$((TERMINAL_WIDTH - 8))
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[1]${COLORS_RESET} ${COLORS_MENU_ITEM}English${COLORS_RESET} (English)"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[1]${COLORS[RESET]} ${COLORS[MENU_ITEM]}English${COLORS[RESET]} (English)"
   printf "%*s" $((width - 25)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[2]${COLORS_RESET} ${COLORS_MENU_ITEM}Türkçe${COLORS_RESET} (Turkish)"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[2]${COLORS[RESET]} ${COLORS[MENU_ITEM]}Türkçe${COLORS[RESET]} (Turkish)"
   printf "%*s" $((width - 25)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[3]${COLORS_RESET} ${COLORS_MENU_ITEM}Русский${COLORS_RESET} (Russian)"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[3]${COLORS[RESET]} ${COLORS[MENU_ITEM]}Русский${COLORS[RESET]} (Russian)"
   printf "%*s" $((width - 26)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[4]${COLORS_RESET} ${COLORS_MENU_ITEM}中文${COLORS_RESET} (Chinese)"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[4]${COLORS[RESET]} ${COLORS[MENU_ITEM]}中文${COLORS[RESET]} (Chinese)"
   printf "%*s" $((width - 25)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[5]${COLORS_RESET} ${COLORS_MENU_ITEM}日本語${COLORS_RESET} (Japanese)"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[5]${COLORS[RESET]} ${COLORS[MENU_ITEM]}日本語${COLORS[RESET]} (Japanese)"
   printf "%*s" $((width - 26)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[6]${COLORS_RESET} ${COLORS_MENU_ITEM}Português (BR)${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[6]${COLORS[RESET]} ${COLORS[MENU_ITEM]}Português (BR)${COLORS[RESET]}"
   printf "%*s" $((width - 27)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[7]${COLORS_RESET} ${COLORS_MENU_ITEM}Español (Spanish)${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[7]${COLORS[RESET]} ${COLORS[MENU_ITEM]}Español (Spanish)${COLORS[RESET]}"
   printf "%*s" $((width - 28)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[8]${COLORS_RESET} ${COLORS_MENU_ITEM}Italiano (Italian)${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[8]${COLORS[RESET]} ${COLORS[MENU_ITEM]}Italiano (Italian)${COLORS[RESET]}"
   printf "%*s" $((width - 29)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[9]${COLORS_RESET} ${COLORS_MENU_ITEM}Français (French)${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[9]${COLORS[RESET]} ${COLORS[MENU_ITEM]}Français (French)${COLORS[RESET]}"
   printf "%*s" $((width - 29)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[A]${COLORS_RESET} ${COLORS_MENU_ITEM}Deutsch (German)${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[A]${COLORS[RESET]} ${COLORS[MENU_ITEM]}Deutsch (German)${COLORS[RESET]}"
   printf "%*s" $((width - 28)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[B]${COLORS_RESET} ${COLORS_MENU_ITEM}Hindi (हिन्दी)${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[B]${COLORS[RESET]} ${COLORS[MENU_ITEM]}Hindi (हिन्दी)${COLORS[RESET]}"
   printf "%*s" $((width - 27)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[C]${COLORS_RESET} ${COLORS_MENU_ITEM}Polski (Polish)${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[C]${COLORS[RESET]} ${COLORS[MENU_ITEM]}Polski (Polish)${COLORS[RESET]}"
   printf "%*s" $((width - 28)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[D]${COLORS_RESET} ${COLORS_MENU_ITEM}Bengali (বাংলা)${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[D]${COLORS[RESET]} ${COLORS[MENU_ITEM]}Bengali (বাংলা)${COLORS[RESET]}"
   printf "%*s" $((width - 28)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_MENU_NUMBER}[0]${COLORS_RESET} ${COLORS_MENU_ITEM}$(get_translation "BACK")${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[MENU_NUMBER]}[0]${COLORS[RESET]} ${COLORS[MENU_ITEM]}$(get_translation "BACK")${COLORS[RESET]}"
   printf "%*s" $((width - 17)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   close_box
   
@@ -3126,29 +3145,29 @@ show_language_selection() {
       # Back
       ;;
     *)
-      if [ "$LANGUAGE" == "tr" ]; then
+      if [[ "$LANGUAGE" == "tr" ]]; then
         echo -e "\nGeçersiz seçenek."
-      elif [ "$LANGUAGE" == "ru" ]; then
+      elif [[ "$LANGUAGE" == "ru" ]]; then
         echo -e "\nНеверный вариант."
-      elif [ "$LANGUAGE" == "zh" ]; then
+      elif [[ "$LANGUAGE" == "zh" ]]; then
         echo -e "\n无效选项。"
-      elif [ "$LANGUAGE" == "ja" ]; then
+      elif [[ "$LANGUAGE" == "ja" ]]; then
         echo -e "\n無効なオプションです。"
-      elif [ "$LANGUAGE" == "ptbr" ]; then
+      elif [[ "$LANGUAGE" == "ptbr" ]]; then
         echo -e "\nOpção inválida."
-      elif [ "$LANGUAGE" == "es" ]; then
+      elif [[ "$LANGUAGE" == "es" ]]; then
         echo -e "\nOpción no válida."
-      elif [ "$LANGUAGE" == "it" ]; then
+      elif [[ "$LANGUAGE" == "it" ]]; then
         echo -e "\nOpzione non valida."
-      elif [ "$LANGUAGE" == "fr" ]; then
+      elif [[ "$LANGUAGE" == "fr" ]]; then
         echo -e "\nOption non valide."
-      elif [ "$LANGUAGE" == "de" ]; then
+      elif [[ "$LANGUAGE" == "de" ]]; then
         echo -e "\nUngültige Option."
-      elif [ "$LANGUAGE" == "hi" ]; then
+      elif [[ "$LANGUAGE" == "hi" ]]; then
         echo -e "\nवैकल्पिक विकल्प चुनें"
-      elif [ "$LANGUAGE" == "pl" ]; then
+      elif [[ "$LANGUAGE" == "pl" ]]; then
         echo -e "\nNieprawidłowa opcja."
-      elif [ "$LANGUAGE" == "bn" ]; then
+      elif [[ "$LANGUAGE" == "bn" ]]; then
         echo -e "\nঅবৈধ বিকল্প।"
       else
         echo -e "\nInvalid option."
@@ -3168,65 +3187,65 @@ show_about() {
   
   local width=$((TERMINAL_WIDTH - 8))
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
-  echo -ne "${COLORS_HEADER}Android Battery Monitoring System${COLORS_RESET}"
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
+  echo -ne "${COLORS[HEADER]}Android Battery Monitoring System${COLORS[RESET]}"
   printf "%*s" $((width - 39)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "$(get_translation "VERSION"): ${VERSION}"
   printf "%*s" $((width - 10 - ${#VERSION})) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "$(get_translation "LICENSE"): MIT"
   printf "%*s" $((width - 13)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
 
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   printf "%*s" $((width - 19)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "─────────────────────────────────────────────────────────────"
   printf "%*s" $((width - 60)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "$(get_translation "ABOUT_TEXT1")"
   printf "%*s" $((width - 64)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "$(get_translation "ABOUT_TEXT2")"
   printf "%*s" $((width - 69)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "$(get_translation "ABOUT_TEXT3")"
   printf "%*s" $((width - 53)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "─────────────────────────────────────────────────────────────"
   printf "%*s" $((width - 60)) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "$(get_translation "CONFIG_DIR"): $HOME/.config/bbms/"
   printf "%*s" $((width - 35 - ${#HOME})) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
-  echo -ne "${COLORS_BORDER}│${COLORS_RESET} "
+  echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
   echo -ne "$(get_translation "LOG_DIR"): ${LOG_DIR}"
   printf "%*s" $((width - 16 - ${#LOG_DIR})) ""
-  echo -e " ${COLORS_BORDER}│${COLORS_RESET}"
+  echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   close_box
   
   echo -e "\n$(get_translation "PRESS_KEY")..."
-  read
+  read -n 1 -s
   
   show_menu
 }
@@ -3234,7 +3253,7 @@ show_about() {
 # Komut satırı argümanlarını işle
 parse_args() {
   local i=1
-  while [ $i -le $# ]; do
+  while [[ $i -le $# ]]; do
     local arg="${!i}"
     case "$arg" in
       --help)
@@ -3264,7 +3283,7 @@ parse_args() {
         ;;
       --refresh=*)
         local rate="${arg#*=}"
-        if [ "$rate" =~ ^[0-9]+$ ]; then
+        if [[ "$rate" =~ ^[0-9]+$ ]]; then
           if (( rate < 1 )); then
             echo "Warning: Refresh rate cannot be less than 1 second. Using 1 second." >&2
             REFRESH_RATE=1
@@ -3442,7 +3461,7 @@ EOF
   esac
   
   # Dil değiştiyse temayı güncelle
-  if [ "$previous_language" != "$LANGUAGE" ]; then
+  if [[ "$previous_language" != "$LANGUAGE" ]]; then
     # Konfigürasyonu kaydet
     save_config
     
@@ -3493,14 +3512,14 @@ main() {
   create_log_dir
   
   # Doğrudan komut satırından --lang belirtilmediyse ve ilk çalıştırmaysa, dil seçim ekranını göster
-  if [ -z "$FROM_CMDLINE" ]; then
+  if [[ -z "$FROM_CMDLINE" ]]; then
     show_welcome_screen
     # Dil değiştirilmiş olabilir, temayı tekrar ayarla
     set_theme "$THEME"
   fi
   
   # Doğrudan canlı izleme başlatılsın mı?
-  if [ -n "$START_LIVE" && "$START_LIVE" -eq 1 ]; then
+  if [[ -n "$START_LIVE" && "$START_LIVE" -eq 1 ]]; then
     LOGGING_ENABLED=1
     start_live_monitoring
   else
@@ -3514,10 +3533,10 @@ get_charging_speed() {
   local current="$1"
   local status="$2"
   local result=""
-  local color="${COLORS_INFO}"
+  local color="${COLORS[INFO]}"
 
   # Sadece şarj durumunda ise
-  if [ "$status" == "Charging" || "$status" == "Full" ]; then
+  if [[ "$status" == "Charging" || "$status" == "Full" ]]; then
     # Mutlak değeri al (şarj akımı negatif olabilir)
     local abs_current=$(echo "$current < 0" | bc -l)
     if (( abs_current == 1 )); then
@@ -3527,15 +3546,15 @@ get_charging_speed() {
     # Şarj hızı sınıflandırması
     if (( $(echo "$current >= 2.0" | bc -l) )); then
       result="Fast Charging"
-      color="${COLORS_WARNING}"
+      color="${COLORS[WARNING]}"
     elif (( $(echo "$current >= 1.0" | bc -l) )); then
       result="Normal Charging"
-      color="${COLORS_SUCCESS}"
+      color="${COLORS[SUCCESS]}"
     else
       result="Slow Charging"
-      color="${COLORS_INFO}"
+      color="${COLORS[INFO]}"
     fi
-  elif [ "$status" == "Discharging" ]; then
+  elif [[ "$status" == "Discharging" ]]; then
     local abs_current=$(echo "$current < 0" | bc -l)
     if (( abs_current == 0 )); then
       current=$(echo "scale=3; -1*$current" | bc)
@@ -3544,21 +3563,21 @@ get_charging_speed() {
     # Deşarj hızı sınıflandırması
     if (( $(echo "$current >= 2.0" | bc -l) )); then
       result="High Power Usage"
-      color="${COLORS_DANGER}"
+      color="${COLORS[DANGER]}"
     elif (( $(echo "$current >= 1.0" | bc -l) )); then
       result="Medium Power Usage"
-      color="${COLORS_WARNING}"
+      color="${COLORS[WARNING]}"
     else
       result="Low Power Usage"
-      color="${COLORS_SUCCESS}"
+      color="${COLORS[SUCCESS]}"
     fi
   else
     result="Not Charging"
-    color="${COLORS_NORMAL}"
+    color="${COLORS[NORMAL]}"
   fi
   
   # Sonuç ve renk döndür
-  echo "${color}${result}${COLORS_RESET}"
+  echo "${color}${result}${COLORS[RESET]}"
 }
 
 # Kalan şarj/deşarj süresi tahmini
@@ -3569,7 +3588,7 @@ estimate_remaining_time() {
   local status="$4"         # Şarj durumu
   
   local estimated_time=""
-  local color="${COLORS_INFO}"
+  local color="${COLORS[INFO]}"
   
   # Akım çok düşük veya sıfırsa (0.1A altında) tahmin yapmayı atla
   if (( $(echo "($current < 0.1) && ($current > -0.1)" | bc -l) )); then
@@ -3586,7 +3605,7 @@ estimate_remaining_time() {
   # Akımı mA'e çevir
   current=$(echo "scale=1; $current * 1000" | bc)
   
-  if [ "$status" == "Charging" ]; then
+  if [[ "$status" == "Charging" ]]; then
     # Şarj olurken: Kalan şarj miktarını hesapla
     local remaining_percent=$(echo "scale=2; 100 - $capacity" | bc)
     local remaining_mah=$(echo "scale=0; ($remaining_percent * $charge_full) / 100" | bc)
@@ -3604,9 +3623,9 @@ estimate_remaining_time() {
       estimated_time="${minutes}m to full"
     fi
     
-    color="${COLORS_SUCCESS}"
+    color="${COLORS[SUCCESS]}"
   
-  elif [ "$status" == "Discharging" ]; then
+  elif [[ "$status" == "Discharging" ]]; then
     # Deşarj olurken: Kalan şarj miktarını hesapla
     local remaining_mah=$(echo "scale=0; ($capacity * $charge_full) / 100" | bc)
     
@@ -3625,18 +3644,18 @@ estimate_remaining_time() {
     
     # Kalan süreye göre renklendirme
     if (( hours < 1 )); then
-      color="${COLORS_DANGER}"
+      color="${COLORS[DANGER]}"
     elif (( hours < 3 )); then
-      color="${COLORS_WARNING}"
+      color="${COLORS[WARNING]}"
     else
-      color="${COLORS_SUCCESS}"
+      color="${COLORS[SUCCESS]}"
     fi
   else
     estimated_time="N/A"
   fi
   
   # Sonuç ve renk döndür
-  echo "${color}${estimated_time}${COLORS_RESET}"
+  echo "${color}${estimated_time}${COLORS[RESET]}"
 }
 
 # Konfigürasyon dosyasını oku
@@ -3647,15 +3666,15 @@ load_config() {
   mkdir -p "$HOME/.config/bbms" 2>/dev/null
   
   # Dosya yoksa varsayılan değerleri kullan
-  if [ ! -f "$config_file" ]; then
+  if [[ ! -f "$config_file" ]]; then
     return
   fi
   
   # Konfigürasyon dosyasını oku
-  if [ -f "$config_file" ]; then
+  if [[ -f "$config_file" ]]; then
     while IFS='=' read -r key value; do
       # Boş satırları ve yorum satırlarını atla
-      [ -z "$key" || "$key" =~ ^# ] && continue
+      [[ -z "$key" || "$key" =~ ^# ]] && continue
       
       # Değişkenleri ayarla
       case "$key" in
@@ -3696,7 +3715,7 @@ save_config() {
   } > "$config_file"
   
   # Dosya yazma izinlerini kontrol et
-  if [ ! -w "$config_file" ]; then
+  if [[ ! -w "$config_file" ]]; then
     echo "Warning: Could not write configuration file: $config_file" >&2
     return 1
   fi
@@ -3712,7 +3731,7 @@ get_device_info() {
   
   # Aşağıdaki kısım gerçek Android cihazlar için çalışacak
   # Varsayılan değerler (bilgi bulunamazsa)
-  if [ "$DEVICE_MODEL" == "Unknown" ]; then
+  if [[ "$DEVICE_MODEL" == "Unknown" ]]; then
     # Cihaz kod adı ve modeli için olası dosya konumları
     local model_files=(
       "/sys/devices/virtual/dmi/id/product_name"
@@ -3721,19 +3740,19 @@ get_device_info() {
     )
     
     # Cihaz modelini bul
-    for file in "${model_files_@}"; do
-      if [ -f "$file" ]; then
+    for file in "${model_files[@]}"; do
+      if [[ -f "$file" ]]; then
         # build.prop dosyası ise, içinden model bilgisini çıkar
-        if [ "$file" == *"build.prop"* ]; then
+        if [[ "$file" == *"build.prop"* ]]; then
           local model_line=$(grep -E "ro\.product\.model|ro\.product\.name" "$file" 2>/dev/null | head -1)
-          if [ -n "$model_line" ]; then
+          if [[ -n "$model_line" ]]; then
             DEVICE_MODEL="${model_line#*=}"
             break
           fi
         else
           # Diğer dosyalar doğrudan okunabilir
           DEVICE_MODEL=$(cat "$file" 2>/dev/null)
-          if [ -n "$DEVICE_MODEL" ]; then
+          if [[ -n "$DEVICE_MODEL" ]]; then
             break
           fi
         fi
@@ -3742,14 +3761,14 @@ get_device_info() {
     
     # Cihaz kod adını bul
     # Genellikle /proc/cpuinfo veya build.prop içinde olabilir
-    if [ -f "/proc/cpuinfo" ]; then
+    if [[ -f "/proc/cpuinfo" ]]; then
       DEVICE_CODENAME=$(grep -E "Hardware|Revision" /proc/cpuinfo 2>/dev/null | head -1 | awk -F':' '{print $2}' | xargs)
     fi
     
     # Kod adı bulunamadıysa, build.prop'tan almayı dene
-    if [ "$DEVICE_CODENAME" == "Unknown" && -f "/system/build.prop" ]; then
+    if [[ "$DEVICE_CODENAME" == "Unknown" && -f "/system/build.prop" ]]; then
       local codename_line=$(grep -E "ro\.product\.device|ro\.build\.product" "/system/build.prop" 2>/dev/null | head -1)
-      if [ -n "$codename_line" ]; then
+      if [[ -n "$codename_line" ]]; then
         DEVICE_CODENAME="${codename_line#*=}"
       fi
     fi
@@ -3759,8 +3778,8 @@ get_device_info() {
     DEVICE_CODENAME=$(echo "$DEVICE_CODENAME" | xargs)
     
     # Boş değerleri "Unknown" olarak ayarla
-    [ -z "$DEVICE_MODEL" ] && DEVICE_MODEL="Unknown"
-    [ -z "$DEVICE_CODENAME" ] && DEVICE_CODENAME="Unknown"
+    [[ -z "$DEVICE_MODEL" ]] && DEVICE_MODEL="Unknown"
+    [[ -z "$DEVICE_CODENAME" ]] && DEVICE_CODENAME="Unknown"
   fi
 }
 
@@ -3770,7 +3789,7 @@ get_battery_model() {
   BATTERY_MODEL="Test Battery LiPo 4800mAh"
   
   # Aşağıdaki kısım gerçek Android cihazlar için çalışacak
-  if [ "$BATTERY_MODEL" == "Unknown" ]; then
+  if [[ "$BATTERY_MODEL" == "Unknown" ]]; then
     # Pil modeli için olası dosya konumları
     local battery_model_files=(
       "/sys/class/power_supply/battery/model_name"
@@ -3779,10 +3798,10 @@ get_battery_model() {
     )
     
     # Pil modelini bul
-    for file in "${battery_model_files_@}"; do
-      if [ -f "$file" ]; then
+    for file in "${battery_model_files[@]}"; do
+      if [[ -f "$file" ]]; then
         BATTERY_MODEL=$(cat "$file" 2>/dev/null)
-        if [ -n "$BATTERY_MODEL" ]; then
+        if [[ -n "$BATTERY_MODEL" ]]; then
           break
         fi
       fi
@@ -3792,7 +3811,7 @@ get_battery_model() {
     BATTERY_MODEL=$(echo "$BATTERY_MODEL" | xargs)
     
     # Boş değeri "Unknown" olarak ayarla
-    [ -z "$BATTERY_MODEL" ] && BATTERY_MODEL="Unknown"
+    [[ -z "$BATTERY_MODEL" ]] && BATTERY_MODEL="Unknown"
   fi
 }
 
