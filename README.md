@@ -10,6 +10,7 @@ Android Battery Monitoring System/Script is a terminal-based tool designed for r
 - 🔄 Automatic data refresh (configurable interval)
 - 📝 Battery performance logging
 - 📋 Detailed technical information
+- And more... 
 
 ## 🌐 Language Support
 - 🇺🇸 English
