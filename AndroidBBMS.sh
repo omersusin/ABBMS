@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/system/bin/sh
 # Android Battery Monitoring System
 # Version: 1.0.0
 # License: MIT
@@ -13,7 +13,7 @@ VERSION="1.0.0"
 
 # Default values
 REFRESH_RATE=5
-LOG_DIR="$HOME/.config/bbms/logs"
+LOG_DIR="$HOME/bbms/logs"
 LOG_FORMAT="csv"
 LANGUAGE="en"
 THEME="dark"
@@ -22,6 +22,30 @@ LOGGING_ENABLED=0
 TERMINAL_WIDTH=80
 TERMINAL_HEIGHT=24
 START_LIVE=0  # Initialize START_LIVE variable
+
+# Check if tput is installed
+if ! command -v tput >/dev/null 2>&1; then
+  echo "tput not found. Attempting to install..."
+
+  # Try installing via Termux's package manager
+  if command -v pkg >/dev/null 2>&1; then
+    pkg update -y && pkg install ncurses -y
+  elif command -v apt >/dev/null 2>&1; then
+    apt update && apt install ncurses-bin -y
+  else
+    echo "Could not find a supported package manager to install 'tput'." >&2
+    exit 1
+  fi
+
+  # Recheck after install
+  if ! command -v tput >/dev/null 2>&1; then
+    echo "Installation failed or 'tput' still not available." >&2
+    exit 1
+  fi
+
+  echo "tput successfully installed."
+fi
+
 
 # Battery data storage
 declare -A BATTERY_INFO=(
@@ -2809,7 +2833,7 @@ show_settings() {
             echo "Log directory set to: $LOG_DIR"
           fi
         else
-          LOG_DIR="$HOME/.config/bbms/logs"
+          LOG_DIR="$HOME/bbms/logs"
           create_log_dir
           if [[ "$LANGUAGE" == "tr" ]]; then
             echo "Log dizini varsayılan değere ayarlandı: $LOG_DIR"
@@ -3233,7 +3257,7 @@ show_about() {
   echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
   echo -ne "${COLORS[BORDER]}│${COLORS[RESET]} "
-  echo -ne "$(get_translation "CONFIG_DIR"): $HOME/.config/bbms/"
+  echo -ne "$(get_translation "CONFIG_DIR"): $HOME/bbms/"
   printf "%*s" $((width - 35 - ${#HOME})) ""
   echo -e " ${COLORS[BORDER]}│${COLORS[RESET]}"
   
@@ -3506,7 +3530,7 @@ main() {
   tput civis
   
   # Konfigürasyon dizinini oluştur
-  mkdir -p "$HOME/.config/bbms" 2>/dev/null
+  mkdir -p "$HOME/bbms" 2>/dev/null
   
   # Log dizinini oluştur
   create_log_dir
@@ -3660,10 +3684,10 @@ estimate_remaining_time() {
 
 # Konfigürasyon dosyasını oku
 load_config() {
-  local config_file="$HOME/.config/bbms/config"
+  local config_file="$HOME/bbms/config"
   
   # Konfigürasyon dizini yoksa oluştur
-  mkdir -p "$HOME/.config/bbms" 2>/dev/null
+  mkdir -p "$HOME/bbms" 2>/dev/null
   
   # Dosya yoksa varsayılan değerleri kullan
   if [[ ! -f "$config_file" ]]; then
@@ -3694,10 +3718,10 @@ load_config() {
 
 # Konfigürasyon dosyasını kaydet
 save_config() {
-  local config_file="$HOME/.config/bbms/config"
+  local config_file="$HOME/bbms/config"
   
   # Konfigürasyon dizini yoksa oluştur
-  mkdir -p "$HOME/.config/bbms" 2>/dev/null
+  mkdir -p "$HOME/bbms" 2>/dev/null
   
   # Konfigürasyon dosyasını oluştur/güncelle
   {
